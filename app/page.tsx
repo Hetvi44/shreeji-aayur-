@@ -1,16 +1,18 @@
-import { Header } from "@/components/header"
-import { HeroSection } from "@/components/hero-section"
-import { CategoriesSection } from "@/components/categories-section"
-import { BestSellersSection } from "@/components/bestsellers-section"
-import { NewArrivalsSection } from "@/components/new-arrivals-section"
-import { ComboOffersBanner } from "@/components/combo-offers-banner"
-import { WhyChooseUsSection } from "@/components/why-choose-us-section"
-import { TestimonialsSection } from "@/components/testimonials-section"
-import { BlogPreviewSection } from "@/components/blog-preview-section"
-import { FAQSection } from "@/components/faq-section"
-import { NewsletterSection } from "@/components/newsletter-section"
-import { Footer } from "@/components/footer"
-import { MobileNav } from "@/components/mobile-nav"
+import { Header } from '@/components/header'
+import { HeroSection } from '@/components/hero-section'
+import { CategoriesSection } from '@/components/categories-section'
+import { BestSellersSection } from '@/components/bestsellers-section'
+import { NewArrivalsSection } from '@/components/new-arrivals-section'
+import { ComboOffersBanner } from '@/components/combo-offers-banner'
+import { TrendingSection } from '@/components/trending-section'
+import { WhyChooseUsSection } from '@/components/why-choose-us-section'
+import { BrandStorySection } from '@/components/brand-story-section'
+import { TestimonialsSection } from '@/components/testimonials-section'
+import { BlogPreviewSection } from '@/components/blog-preview-section'
+import { FAQSection } from '@/components/faq-section'
+import { NewsletterSection } from '@/components/newsletter-section'
+import { Footer } from '@/components/footer'
+import { MobileNav } from '@/components/mobile-nav'
 
 export default function Home() {
   return (
@@ -21,7 +23,9 @@ export default function Home() {
       <BestSellersSection />
       <NewArrivalsSection />
       <ComboOffersBanner />
+      <TrendingSection />
       <WhyChooseUsSection />
+      <BrandStorySection />
       <TestimonialsSection />
       <BlogPreviewSection />
       <FAQSection />

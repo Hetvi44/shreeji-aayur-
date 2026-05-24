@@ -1,18 +1,18 @@
-"use client"
+'use client'
 
-import { useState } from "react"
-import Link from "next/link"
-import { Menu, Search, ShoppingBag, User, X, Heart } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { motion, AnimatePresence } from "framer-motion"
+import { useState } from 'react'
+import Link from 'next/link'
+import { Menu, Search, ShoppingBag, User, X, Heart, Leaf } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { motion, AnimatePresence } from 'framer-motion'
 
 const navLinks = [
-  { name: "Shop", href: "/products" },
-  { name: "Skin Care", href: "/category/skin-care" },
-  { name: "Hair Care", href: "/category/hair-care" },
-  { name: "Body Care", href: "/category/body-care" },
-  { name: "Face Care", href: "/category/face-care" },
+  { name: 'Shop', href: '/products' },
+  { name: 'Skin Care', href: '/category/skin-care' },
+  { name: 'Hair Care', href: '/category/hair-care' },
+  { name: 'Body Care', href: '/category/body-care' },
+  { name: 'Face Care', href: '/category/face-care' },
 ]
 
 export function Header() {
@@ -23,7 +23,7 @@ export function Header() {
       {/* Announcement Bar */}
       <div className="bg-primary text-primary-foreground py-2 text-center">
         <p className="text-xs md:text-sm font-medium tracking-wide">
-          Free Shipping on Orders Above ₹999 | COD Available | 100% Organic Beauty
+          🌿 Free Shipping on Orders Above ₹999 &nbsp;|&nbsp; COD Available &nbsp;|&nbsp; 100% Ayurvedic & Natural
         </p>
       </div>
 
@@ -38,7 +38,11 @@ export function Header() {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-[300px] bg-background">
-              <nav className="flex flex-col gap-6 mt-8">
+              <div className="flex items-center gap-2 mb-8 mt-2">
+                <Leaf className="h-5 w-5 text-primary" />
+                <span className="text-xl font-semibold font-serif tracking-tight">ShreejiAayur</span>
+              </div>
+              <nav className="flex flex-col gap-6">
                 {navLinks.map((link) => (
                   <Link
                     key={link.name}
@@ -48,11 +52,11 @@ export function Header() {
                     {link.name}
                   </Link>
                 ))}
-                <div className="border-t border-border pt-6 mt-2">
-                  <Link href="/about" className="text-xl font-medium text-foreground hover:text-primary transition-colors block mb-6">
+                <div className="border-t border-border pt-6 mt-2 flex flex-col gap-6">
+                  <Link href="/about" className="text-xl font-medium text-foreground hover:text-primary transition-colors">
                     About Us
                   </Link>
-                  <Link href="/blog" className="text-xl font-medium text-foreground hover:text-primary transition-colors block">
+                  <Link href="/blog" className="text-xl font-medium text-foreground hover:text-primary transition-colors">
                     Blog
                   </Link>
                 </div>
@@ -61,7 +65,11 @@ export function Header() {
           </Sheet>
 
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 md:absolute md:left-1/2 md:-translate-x-1/2">
+          <Link
+            href="/"
+            className="flex items-center gap-2 md:absolute md:left-1/2 md:-translate-x-1/2"
+          >
+            <Leaf className="h-5 w-5 text-primary hidden md:block" />
             <span className="text-xl md:text-2xl font-semibold tracking-tight text-foreground font-serif">
               ShreejiAayur
             </span>
@@ -84,10 +92,10 @@ export function Header() {
           <div className="flex items-center gap-1 md:gap-2">
             <AnimatePresence mode="wait">
               {isSearchOpen ? (
-                <motion.div 
+                <motion.div
                   className="flex items-center gap-2"
                   initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: "auto" }}
+                  animate={{ opacity: 1, width: 'auto' }}
                   exit={{ opacity: 0, width: 0 }}
                   transition={{ duration: 0.2 }}
                 >
@@ -117,13 +125,23 @@ export function Header() {
                     <Search className="h-5 w-5" />
                     <span className="sr-only">Search</span>
                   </Button>
-                  <Button variant="ghost" size="icon" className="shrink-0 hidden md:flex" asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 hidden md:flex"
+                    asChild
+                  >
                     <Link href="/wishlist">
                       <Heart className="h-5 w-5" />
                       <span className="sr-only">Wishlist</span>
                     </Link>
                   </Button>
-                  <Button variant="ghost" size="icon" className="shrink-0 hidden md:flex" asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 hidden md:flex"
+                    asChild
+                  >
                     <Link href="/login">
                       <User className="h-5 w-5" />
                       <span className="sr-only">Account</span>
