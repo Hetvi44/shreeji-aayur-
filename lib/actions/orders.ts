@@ -1,287 +1,121 @@
-"use server"
+'use server'
 
-import { revalidatePath } from "next/cache"
-import { auth } from "@clerk/nextjs/server"
-import { db } from "@/lib/db"
-import type { ActionResult, OrderWithItems } from "@/types"
+import { db } from '@/lib/db'
+import { auth } from '@clerk/nextjs/server'
 
-// ─── CREATE ORDER ────────────────────────────────────────────
-export async function createOrder(input: {
-  addressId: string
-  paymentMethod: "razorpay" | "cod"
-  couponCode?: string
-}): Promise<ActionResult<{ orderId: string; orderNumber: string; razorpayOrderId?: string }>> {
+export async function createOrder(data: any) {
+  const { userId } = await auth()
+  if (!userId) throw new Error('Unauthorized')
+
   try {
-    const { userId: clerkId } = await auth()
-    if (!clerkId) return { success: false, error: "Please login to place an order" }
-
     const user = await db.user.findUnique({
-      where: { clerkId },
-      include: {
-        cart: {
-          include: {
-            product: true,
-          },
-        },
-      },
+      where: { clerkId: userId },
     })
 
-    if (!user) return { success: false, error: "User not found" }
-    if (user.cart.length === 0) return { success: false, error: "Cart is empty" }
+    if (!user) throw new Error('User not found')
 
-    // Validate stock for all items
-    for (const item of user.cart) {
-      if (item.product.stock < item.quantity) {
-        return {
-          success: false,
-          error: `"${item.product.name}" has only ${item.product.stock} units left`,
-        }
-      }
-    }
-
-    // Calculate subtotal
-    const subtotal = user.cart.reduce(
-      (sum: number, item: any) => sum + item.product.price * item.quantity,
-      0
-    )
-
-    // Apply coupon
-    let discount  = 0
-    let couponId: string | undefined
-
-    if (input.couponCode) {
-      const coupon = await db.coupon.findUnique({
-        where: { code: input.couponCode.toUpperCase(), isActive: true },
-      })
-
-      if (coupon) {
-        const isExpired = coupon.expiresAt && coupon.expiresAt < new Date()
-        const isMaxed   = coupon.usedCount >= coupon.maxUses
-        const meetsMin  = subtotal >= coupon.minOrderValue
-
-        if (!isExpired && !isMaxed && meetsMin) {
-          discount =
-            coupon.type === "PERCENTAGE"
-              ? Math.round((subtotal * coupon.value) / 100)
-              : coupon.value
-          couponId = coupon.id
-        }
-      }
-    }
-
-    // Shipping: free above ₹999
-    const shippingCharge = subtotal >= 99900 ? 0 : 9900 // paise
-    const total = subtotal - discount + shippingCharge
-
-    // Generate readable order number
-    const orderNumber = `SA-${Date.now().toString().slice(-8)}`
-
-    // Create order in transaction
-    const order = await db.$transaction(async (tx: any) => {
-      // Create order
-      const newOrder = await tx.order.create({
-        data: {
-          orderNumber,
-          userId:        user.id,
-          addressId:     input.addressId,
-          paymentMethod: input.paymentMethod,
-          paymentStatus: input.paymentMethod === "cod" ? "PENDING" : "PENDING",
-          status:        "PENDING",
-          subtotal,
-          discount,
-          shippingCharge,
-          total,
-          couponId,
-          items: {
-            create: user.cart.map((item: any) => ({
-              productId: item.productId,
-              quantity:  item.quantity,
-              price:     item.product.price,
-              name:      item.product.name,
-              image:     item.product.images[0] ?? "",
-            })),
-          },
-        },
-      })
-
-      // Decrement stock
-      for (const item of user.cart) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-        })
-      }
-
-      // Increment coupon usage
-      if (couponId) {
-        await tx.coupon.update({
-          where: { id: couponId },
-          data: { usedCount: { increment: 1 } },
-        })
-      }
-
-      // Clear cart
-      await tx.cartItem.deleteMany({ where: { userId: user.id } })
-
-      return newOrder
-    })
-
-    revalidatePath("/cart")
-    revalidatePath("/orders")
-    revalidatePath("/admin/orders")
-
-    return {
-      success: true,
-      data: { orderId: order.id, orderNumber: order.orderNumber },
-    }
-  } catch (error) {
-    console.error("[createOrder]", error)
-    return { success: false, error: "Failed to place order. Please try again." }
-  }
-}
-
-// ─── GET USER ORDERS ─────────────────────────────────────────
-export async function getUserOrders(): Promise<OrderWithItems[]> {
-  try {
-    const { userId: clerkId } = await auth()
-    if (!clerkId) return []
-
-    const user = await db.user.findUnique({ where: { clerkId } })
-    if (!user) return []
-
-    const orders = await db.order.findMany({
-      where: { userId: user.id },
-      include: {
-        items:   true,
-        address: true,
-        coupon:  { select: { code: true } },
+    const order = await db.order.create({
+      data: {
+        ...data,
+        userId: user.id,
+        orderNumber: `SA-${Date.now()}`,
       },
-      orderBy: { createdAt: "desc" },
-    })
-
-    return orders
-  } catch (error) {
-    console.error("[getUserOrders]", error)
-    return []
-  }
-}
-
-// ─── GET SINGLE ORDER ────────────────────────────────────────
-export async function getOrderById(
-  orderId: string
-): Promise<OrderWithItems | null> {
-  try {
-    const { userId: clerkId } = await auth()
-    if (!clerkId) return null
-
-    const user = await db.user.findUnique({ where: { clerkId } })
-    if (!user) return null
-
-    const order = await db.order.findFirst({
-      where: { id: orderId, userId: user.id },
-      include: {
-        items:   true,
-        address: true,
-        coupon:  { select: { code: true } },
-      },
+      include: { items: true, address: true },
     })
 
     return order
   } catch (error) {
-    console.error("[getOrderById]", error)
-    return null
+    console.error('[createOrder]', error)
+    throw new Error('Failed to create order')
   }
 }
 
-// ─── UPDATE ORDER STATUS (ADMIN) ─────────────────────────────
-export async function updateOrderStatus(
-  orderId: string,
-  status: string,
-  trackingNumber?: string
-): Promise<ActionResult> {
+export async function getUserOrders() {
+  const { userId } = await auth()
+  if (!userId) throw new Error('Unauthorized')
+
   try {
-    await db.order.update({
-      where: { id: orderId },
-      data: {
-        status: status as any,
-        ...(trackingNumber && { trackingNumber }),
-        ...(status === "DELIVERED" && {
-          paymentStatus: "PAID",
-        }),
-      },
+    const user = await db.user.findUnique({
+      where: { clerkId: userId },
     })
 
-    revalidatePath("/admin/orders")
-    revalidatePath("/orders")
+    if (!user) throw new Error('User not found')
 
-    return { success: true, data: undefined }
+    return await db.order.findMany({
+      where: { userId: user.id },
+      include: { items: true, address: true },
+      orderBy: { createdAt: 'desc' },
+    })
   } catch (error) {
-    console.error("[updateOrderStatus]", error)
-    return { success: false, error: "Failed to update order status" }
+    console.error('[getUserOrders]', error)
+    throw new Error('Failed to fetch orders')
   }
 }
 
-// ─── GET ALL ORDERS (ADMIN) ──────────────────────────────────
-export async function getAdminOrders(params?: {
-  status?: string
-  limit?: number
-  page?: number
-}) {
+export async function getOrderById(orderId: string) {
+  const { userId } = await auth()
+  if (!userId) throw new Error('Unauthorized')
+
   try {
-    const page  = params?.page ?? 1
-    const limit = params?.limit ?? 20
-    const skip  = (page - 1) * limit
+    const user = await db.user.findUnique({
+      where: { clerkId: userId },
+    })
 
-    const where = params?.status && params.status !== "ALL"
-      ? { status: params.status as any }
-      : {}
+    if (!user) throw new Error('User not found')
 
-    const [orders, total] = await Promise.all([
-      db.order.findMany({
-        where,
-        include: {
-          user:    { select: { name: true, email: true } },
-          items:   { select: { quantity: true, name: true } },
-          address: { select: { city: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      db.order.count({ where }),
-    ])
-
-    return { orders, total, pages: Math.ceil(total / limit) }
+    return await db.order.findUnique({
+      where: { id: orderId, userId: user.id },
+      include: { items: { include: { product: true } }, address: true },
+    })
   } catch (error) {
-    console.error("[getAdminOrders]", error)
-    return { orders: [], total: 0, pages: 0 }
+    console.error('[getOrderById]', error)
+    throw new Error('Failed to fetch order')
   }
 }
 
-// ─── ADMIN DASHBOARD STATS ───────────────────────────────────
+export async function updateOrderStatus(orderId: string, status: string) {
+  try {
+    return await db.order.update({
+      where: { id: orderId },
+      data: { status },
+    })
+  } catch (error) {
+    console.error('[updateOrderStatus]', error)
+    throw new Error('Failed to update order')
+  }
+}
+
+export async function getAdminOrders() {
+  try {
+    return await db.order.findMany({
+      include: { items: true, user: true, address: true },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    })
+  } catch (error) {
+    console.error('[getAdminOrders]', error)
+    throw new Error('Failed to fetch orders')
+  }
+}
+
 export async function getDashboardStats() {
   try {
-    const [totalRevenue, totalOrders, totalCustomers, lowStockCount] =
-      await Promise.all([
-        db.order.aggregate({
-          where: { paymentStatus: "PAID" },
-          _sum: { total: true },
-        }),
-        db.order.count(),
-        db.user.count({ where: { role: "CUSTOMER" } }),
-        db.product.count({
-          where: { stock: { lt: 10 }, isActive: true },
-        }),
-      ])
+    const totalOrders = await db.order.count()
+    const totalRevenue = await db.order.aggregate({
+      where: { paymentStatus: 'PAID' },
+      _sum: { total: true },
+    })
+    const totalCustomers = await db.user.count()
+    const totalProducts = await db.product.count()
 
     return {
-      revenue:    totalRevenue._sum.total ?? 0,
-      orders:     totalOrders,
-      customers:  totalCustomers,
-      lowStock:   lowStockCount,
+      totalOrders,
+      totalRevenue: totalRevenue._sum.total || 0,
+      totalCustomers,
+      totalProducts,
     }
   } catch (error) {
-    console.error("[getDashboardStats]", error)
-    return { revenue: 0, orders: 0, customers: 0, lowStock: 0 }
+    console.error('[getDashboardStats]', error)
+    throw new Error('Failed to fetch stats')
   }
 }

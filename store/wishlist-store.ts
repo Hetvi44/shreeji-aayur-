@@ -1,37 +1,43 @@
+'use client'
+
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 interface WishlistStore {
   ids: string[]
+  count: number
+  
+  setIds: (ids: string[]) => void
   toggle: (productId: string) => void
   isWishlisted: (productId: string) => boolean
-  setIds: (ids: string[]) => void
+  clear: () => void
 }
 
 export const useWishlistStore = create<WishlistStore>()(
   persist(
     (set, get) => ({
       ids: [],
+      count: 0,
 
-      toggle: (productId) => {
-        const ids = get().ids
-        if (ids.includes(productId)) {
-          set({ ids: ids.filter((id) => id !== productId) })
-        } else {
-          set({ ids: [...ids, productId] })
-        }
-      },
+      setIds: (ids) => set({ ids, count: ids.length }),
 
-      isWishlisted: (productId) => {
-        return get().ids.includes(productId)
-      },
+      toggle: (productId) =>
+        set((state) => {
+          const isWishlisted = state.ids.includes(productId)
+          const newIds = isWishlisted
+            ? state.ids.filter((id) => id !== productId)
+            : [...state.ids, productId]
+          
+          return { ids: newIds, count: newIds.length }
+        }),
 
-      setIds: (ids) => {
-        set({ ids })
-      },
+      isWishlisted: (productId) => get().ids.includes(productId),
+
+      clear: () => set({ ids: [], count: 0 }),
     }),
     {
-      name: 'wishlist-storage',
+      name: 'wishlist-store',
+      skipHydration: true,
     }
   )
 )

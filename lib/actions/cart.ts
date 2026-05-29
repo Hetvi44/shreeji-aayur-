@@ -1,151 +1,148 @@
-"use server"
+'use server'
 
-import { revalidatePath } from "next/cache"
-import { auth } from "@clerk/nextjs/server"
-import { db } from "@/lib/db"
-import type { ActionResult, CartItemWithProduct } from "@/types"
+import { db } from '@/lib/db'
+import { auth } from '@clerk/nextjs/server'
 
-// ─── GET CART ────────────────────────────────────────────────
-export async function getCart(): Promise<CartItemWithProduct[]> {
+export async function getCart() {
+  const { userId } = await auth()
+  
+  if (!userId) {
+    return { items: [], total: 0, count: 0 }
+  }
+
   try {
-    const { userId: clerkId } = await auth()
-    if (!clerkId) return []
+    const user = await db.user.findUnique({
+      where: { clerkId: userId },
+    })
 
-    const user = await db.user.findUnique({ where: { clerkId } })
-    if (!user) return []
+    if (!user) return { items: [], total: 0, count: 0 }
 
     const items = await db.cartItem.findMany({
       where: { userId: user.id },
-      include: {
-        product: {
-          select: {
-            id: true, name: true, slug: true,
-            price: true, originalPrice: true,
-            images: true, stock: true,
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
+      include: { product: true },
     })
 
-    return items
+    const total = items.reduce((acc, item) => acc + item.product.price * item.quantity, 0)
+    const count = items.reduce((acc, item) => acc + item.quantity, 0)
+
+    return { items, total, count }
   } catch (error) {
-    console.error("[getCart]", error)
-    return []
+    console.error('[getCart]', error)
+    throw new Error('Failed to fetch cart')
   }
 }
 
-// ─── ADD TO CART ─────────────────────────────────────────────
-export async function addToCart(
-  productId: string,
-  quantity: number = 1
-): Promise<ActionResult> {
+export async function addToCart(productId: string, quantity: number = 1) {
+  const { userId } = await auth()
+  
+  if (!userId) throw new Error('Unauthorized')
+
   try {
-    const { userId: clerkId } = await auth()
-    if (!clerkId) return { success: false, error: "Please login to add items to cart" }
-
-    const user = await db.user.findUnique({ where: { clerkId } })
-    if (!user) return { success: false, error: "User not found" }
-
-    // Check product stock
-    const product = await db.product.findUnique({
-      where: { id: productId, isActive: true },
+    const user = await db.user.findUnique({
+      where: { clerkId: userId },
     })
-    if (!product) return { success: false, error: "Product not found" }
-    if (product.stock < quantity) return { success: false, error: "Insufficient stock" }
 
-    // Upsert cart item
-    await db.cartItem.upsert({
+    if (!user) throw new Error('User not found')
+
+    const existingItem = await db.cartItem.findUnique({
       where: { userId_productId: { userId: user.id, productId } },
-      create: { userId: user.id, productId, quantity },
-      update: { quantity: { increment: quantity } },
     })
 
-    revalidatePath("/cart")
-    return { success: true, data: undefined }
-  } catch (error) {
-    console.error("[addToCart]", error)
-    return { success: false, error: "Failed to add to cart" }
-  }
-}
-
-// ─── UPDATE CART QUANTITY ────────────────────────────────────
-export async function updateCartQuantity(
-  cartItemId: string,
-  quantity: number
-): Promise<ActionResult> {
-  try {
-    const { userId: clerkId } = await auth()
-    if (!clerkId) return { success: false, error: "Unauthorized" }
-
-    if (quantity <= 0) {
-      await db.cartItem.delete({ where: { id: cartItemId } })
+    if (existingItem) {
+      return await db.cartItem.update({
+        where: { id: existingItem.id },
+        data: { quantity: { increment: quantity } },
+        include: { product: true },
+      })
     } else {
-      await db.cartItem.update({
-        where: { id: cartItemId },
-        data: { quantity },
+      return await db.cartItem.create({
+        data: { userId: user.id, productId, quantity },
+        include: { product: true },
       })
     }
-
-    revalidatePath("/cart")
-    return { success: true, data: undefined }
   } catch (error) {
-    console.error("[updateCartQuantity]", error)
-    return { success: false, error: "Failed to update cart" }
+    console.error('[addToCart]', error)
+    throw new Error('Failed to add to cart')
   }
 }
 
-// ─── REMOVE FROM CART ────────────────────────────────────────
-export async function removeFromCart(cartItemId: string): Promise<ActionResult> {
+export async function removeFromCart(cartItemId: string) {
+  const { userId } = await auth()
+  if (!userId) throw new Error('Unauthorized')
+
   try {
-    const { userId: clerkId } = await auth()
-    if (!clerkId) return { success: false, error: "Unauthorized" }
-
-    await db.cartItem.delete({ where: { id: cartItemId } })
-
-    revalidatePath("/cart")
-    return { success: true, data: undefined }
+    await db.cartItem.delete({
+      where: { id: cartItemId },
+    })
+    return { success: true }
   } catch (error) {
-    console.error("[removeFromCart]", error)
-    return { success: false, error: "Failed to remove item" }
+    console.error('[removeFromCart]', error)
+    throw new Error('Failed to remove from cart')
   }
 }
 
-// ─── CLEAR CART ──────────────────────────────────────────────
-export async function clearCart(): Promise<ActionResult> {
+export async function updateCartQuantity(cartItemId: string, quantity: number) {
+  const { userId } = await auth()
+  if (!userId) throw new Error('Unauthorized')
+
   try {
-    const { userId: clerkId } = await auth()
-    if (!clerkId) return { success: false, error: "Unauthorized" }
+    if (quantity <= 0) {
+      return await removeFromCart(cartItemId)
+    }
 
-    const user = await db.user.findUnique({ where: { clerkId } })
-    if (!user) return { success: false, error: "User not found" }
-
-    await db.cartItem.deleteMany({ where: { userId: user.id } })
-
-    revalidatePath("/cart")
-    return { success: true, data: undefined }
+    return await db.cartItem.update({
+      where: { id: cartItemId },
+      data: { quantity },
+      include: { product: true },
+    })
   } catch (error) {
-    console.error("[clearCart]", error)
-    return { success: false, error: "Failed to clear cart" }
+    console.error('[updateCartQuantity]', error)
+    throw new Error('Failed to update cart')
   }
 }
 
-// ─── GET CART COUNT ──────────────────────────────────────────
-export async function getCartCount(): Promise<number> {
-  try {
-    const { userId: clerkId } = await auth()
-    if (!clerkId) return 0
+export async function clearCart() {
+  const { userId } = await auth()
+  if (!userId) throw new Error('Unauthorized')
 
-    const user = await db.user.findUnique({ where: { clerkId } })
+  try {
+    const user = await db.user.findUnique({
+      where: { clerkId: userId },
+    })
+
+    if (!user) throw new Error('User not found')
+
+    await db.cartItem.deleteMany({
+      where: { userId: user.id },
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('[clearCart]', error)
+    throw new Error('Failed to clear cart')
+  }
+}
+
+export async function getCartCount() {
+  const { userId } = await auth()
+  
+  if (!userId) return 0
+
+  try {
+    const user = await db.user.findUnique({
+      where: { clerkId: userId },
+    })
+
     if (!user) return 0
 
-    const result = await db.cartItem.aggregate({
+    const count = await db.cartItem.aggregate({
       where: { userId: user.id },
       _sum: { quantity: true },
     })
 
-    return result._sum.quantity ?? 0
-  } catch {
+    return count._sum.quantity || 0
+  } catch (error) {
+    console.error('[getCartCount]', error)
     return 0
   }
 }
