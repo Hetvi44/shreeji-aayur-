@@ -1,0 +1,277 @@
+// ─────────────────────────────────────────────────────────────
+//  ShreejiAayur — Prisma Schema
+//  Database: PostgreSQL (Neon)
+//  Run: npx prisma generate && npx prisma db push
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  USER
+// ─────────────────────────────────────────────────────────────
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique          // Clerk user ID
+  email     String   @unique
+  name      String?
+  phone     String?
+  avatar    String?
+  role      Role     @default(CUSTOMER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  addresses Address[]
+  orders    Order[]
+  reviews   Review[]
+  wishlist  WishlistItem[]
+  cart      CartItem[]
+
+  @@map("users")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+// ─────────────────────────────────────────────────────────────
+//  ADDRESS
+// ─────────────────────────────────────────────────────────────
+model Address {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  phone      String
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  pincode    String
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  orders Order[]
+
+  @@map("addresses")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  CATEGORY
+// ─────────────────────────────────────────────────────────────
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  image       String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products Product[]
+
+  @@map("categories")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  PRODUCT
+// ─────────────────────────────────────────────────────────────
+model Product {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  description   String
+  ingredients   String?
+  benefits      String?  // stored as JSON string
+  howToUse      String?
+  price         Int      // in paise (₹1 = 100 paise)
+  originalPrice Int?
+  stock         Int      @default(0)
+  images        String[] // array of Cloudinary URLs
+  badge         String?  // "Best Seller", "New", "Trending"
+  categoryId    String
+  category      Category @relation(fields: [categoryId], references: [id])
+  isFeatured    Boolean  @default(false)
+  isTrending    Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orderItems   OrderItem[]
+  reviews      Review[]
+  wishlist     WishlistItem[]
+  cartItems    CartItem[]
+
+  @@map("products")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  CART
+// ─────────────────────────────────────────────────────────────
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@map("cart_items")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  WISHLIST
+// ─────────────────────────────────────────────────────────────
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@map("wishlist_items")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  ORDER
+// ─────────────────────────────────────────────────────────────
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  addressId       String
+  address         Address     @relation(fields: [addressId], references: [id])
+  status          OrderStatus @default(PENDING)
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentMethod   String      // "razorpay" | "cod"
+  razorpayOrderId String?
+  razorpayPaymentId String?
+  subtotal        Int         // paise
+  discount        Int         @default(0)
+  shippingCharge  Int         @default(0)
+  total           Int         // paise
+  couponId        String?
+  coupon          Coupon?     @relation(fields: [couponId], references: [id])
+  trackingNumber  String?
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  items OrderItem[]
+
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  PACKED
+  SHIPPED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  RETURNED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+// ─────────────────────────────────────────────────────────────
+//  ORDER ITEM
+// ─────────────────────────────────────────────────────────────
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Int     // price at time of purchase (paise)
+  name      String  // snapshot of product name
+  image     String  // snapshot of product image
+
+  @@map("order_items")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  COUPON
+// ─────────────────────────────────────────────────────────────
+model Coupon {
+  id           String     @id @default(cuid())
+  code         String     @unique
+  type         CouponType
+  value        Int        // percentage (10 = 10%) or fixed amount in paise
+  minOrderValue Int       @default(0)
+  maxUses      Int        @default(100)
+  usedCount    Int        @default(0)
+  isActive     Boolean    @default(true)
+  expiresAt    DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  orders Order[]
+
+  @@map("coupons")
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED
+}
+
+// ─────────────────────────────────────────────────────────────
+//  REVIEW
+// ─────────────────────────────────────────────────────────────
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rating    Int      // 1–5
+  title     String?
+  body      String?
+  isApproved Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@map("reviews")
+}
+
+// ─────────────────────────────────────────────────────────────
+//  BANNER  (homepage banners managed from admin)
+// ─────────────────────────────────────────────────────────────
+model Banner {
+  id        String   @id @default(cuid())
+  title     String
+  subtitle  String?
+  image     String
+  link      String?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("banners")
+}

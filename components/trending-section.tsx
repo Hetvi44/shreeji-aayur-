@@ -2,70 +2,14 @@
 
 import { useState } from 'react'
 import { ProductCarousel, ProductQuickView } from './product-card'
-import type { Product } from '@/lib/products'
+import type { ProductWithCategory } from '@/types'
 
-const trendingProducts: Product[] = [
-  {
-    id: 13,
-    name: 'Chandan Glow Cream',
-    description:
-      'Lightweight moisturizer with pure sandalwood and manjistha. Evens skin tone while providing lasting hydration without heaviness.',
-    price: 749,
-    originalPrice: 899,
-    image:
-      'https://images.unsplash.com/photo-1570194065650-d99fb4b38b15?q=80&w=500&auto=format&fit=crop',
-    badge: 'Trending',
-    category: 'Skin Care',
-  },
-  {
-    id: 14,
-    name: 'Ashwagandha Night Repair',
-    description:
-      'Overnight treatment serum with adaptogenic ashwagandha. Works while you sleep to reduce stress signs and restore youthful vitality.',
-    price: 1099,
-    originalPrice: 1299,
-    image:
-      'https://images.unsplash.com/photo-1617897903246-719242758050?q=80&w=500&auto=format&fit=crop',
-    badge: 'New',
-    category: 'Face Care',
-  },
-  {
-    id: 15,
-    name: 'Triphala Eye Elixir',
-    description:
-      'Gentle eye treatment with triphala and cucumber extracts. Reduces puffiness, dark circles, and fine lines around the delicate eye area.',
-    price: 649,
-    image:
-      'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?q=80&w=500&auto=format&fit=crop',
-    category: 'Face Care',
-  },
-  {
-    id: 4,
-    name: 'Ubtan Body Polish',
-    description:
-      'Traditional turmeric-based body scrub that exfoliates, brightens, and nourishes. Made with chickpea flour, turmeric, and rose petals.',
-    price: 799,
-    originalPrice: 999,
-    image:
-      'https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?q=80&w=500&auto=format&fit=crop',
-    badge: 'Trending',
-    category: 'Body Care',
-  },
-  {
-    id: 10,
-    name: 'Jasmine Body Lotion',
-    description:
-      'Lightweight body lotion infused with jasmine extract and shea butter. Non-greasy formula that absorbs quickly for all-day moisture.',
-    price: 499,
-    image:
-      'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?q=80&w=500&auto=format&fit=crop',
-    badge: 'Trending',
-    category: 'Body Care',
-  },
-]
+interface TrendingSectionProps {
+  products: ProductWithCategory[]
+}
 
-export function TrendingSection() {
-  const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null)
+export function TrendingSection({ products }: TrendingSectionProps) {
+  const [quickViewProduct, setQuickViewProduct] = useState<ProductWithCategory | null>(null)
 
   return (
     <section className="py-16 md:py-24">
@@ -79,7 +23,7 @@ export function TrendingSection() {
           </div>
         </div>
 
-        <ProductCarousel products={trendingProducts} onQuickView={setQuickViewProduct} />
+        <ProductCarousel products={products} onQuickView={setQuickViewProduct} />
 
         <ProductQuickView
           product={quickViewProduct}

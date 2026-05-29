@@ -4,36 +4,17 @@ import Image from "next/image"
 import Link from "next/link"
 import { motion } from "framer-motion"
 
-const categories = [
-  {
-    name: "Skin Care",
-    description: "Nourish & protect",
-    image: "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?q=80&w=500&auto=format&fit=crop",
-    href: "/category/skin-care",
-    count: 24,
-  },
-  {
-    name: "Hair Care",
-    description: "Strengthen & shine",
-    image: "https://images.unsplash.com/photo-1526947425960-945c6e72858f?q=80&w=500&auto=format&fit=crop",
-    href: "/category/hair-care",
-    count: 18,
-  },
-  {
-    name: "Body Care",
-    description: "Pamper & rejuvenate",
-    image: "https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?q=80&w=500&auto=format&fit=crop",
-    href: "/category/body-care",
-    count: 15,
-  },
-  {
-    name: "Face Care",
-    description: "Cleanse & glow",
-    image: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?q=80&w=500&auto=format&fit=crop",
-    href: "/category/face-care",
-    count: 20,
-  },
-]
+interface Category {
+  id: string
+  name: string
+  slug: string
+  description?: string | null
+  image?: string | null
+}
+
+interface CategoriesSectionProps {
+  categories: Category[]
+}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -50,7 +31,7 @@ const itemVariants = {
   visible: { opacity: 1, y: 0 }
 }
 
-export function CategoriesSection() {
+export function CategoriesSection({ categories }: CategoriesSectionProps) {
   return (
     <section id="categories" className="py-16 md:py-24 bg-secondary/30">
       <div className="container mx-auto px-4">
@@ -75,24 +56,23 @@ export function CategoriesSection() {
           viewport={{ once: true }}
         >
           {categories.map((category) => (
-            <motion.div key={category.name} variants={itemVariants}>
+            <motion.div key={category.id} variants={itemVariants}>
               <Link
-                href={category.href}
+                href={`/products?category=${category.slug}`}
                 className="group relative aspect-[3/4] rounded-2xl overflow-hidden bg-card block"
               >
                 <Image
-                  src={category.image}
+                  src={category.image || '/placeholder-image.jpg'}
                   alt={category.name}
                   fill
                   className="object-cover transition-transform duration-500 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-foreground/60 via-foreground/20 to-transparent" />
                 <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 text-card">
-                  <span className="text-xs tracking-wider uppercase opacity-80 mb-1 block">
-                    {category.count} Products
-                  </span>
                   <h3 className="text-lg md:text-xl font-medium mb-1 font-serif">{category.name}</h3>
-                  <p className="text-sm opacity-80 hidden md:block">{category.description}</p>
+                  {category.description && (
+                    <p className="text-sm opacity-80 hidden md:block">{category.description}</p>
+                  )}
                 </div>
               </Link>
             </motion.div>

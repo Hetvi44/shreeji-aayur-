@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Header } from "@/components/header"
@@ -8,54 +8,125 @@ import { Footer } from "@/components/footer"
 import { MobileNav } from "@/components/mobile-nav"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Minus, Plus, X, Truck, Tag, ShoppingBag } from "lucide-react"
+import { Minus, Plus, X, Truck, Tag, ShoppingBag, Loader2 } from "lucide-react"
 import { motion } from "framer-motion"
-
-const initialCartItems = [
-  {
-    id: 1,
-    name: "Kumkumadi Radiance Serum",
-    price: 1299,
-    originalPrice: 1599,
-    image: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?q=80&w=500&auto=format&fit=crop",
-    category: "Face Care",
-    quantity: 1,
-  },
-  {
-    id: 5,
-    name: "Brahmi Hair Oil",
-    price: 699,
-    image: "https://images.unsplash.com/photo-1526947425960-945c6e72858f?q=80&w=500&auto=format&fit=crop",
-    category: "Hair Care",
-    quantity: 2,
-  },
-]
+import { toast } from "sonner"
+import { getCart, updateCartQuantity, removeFromCart } from "@/lib/actions/cart"
+import { validateCoupon } from "@/lib/actions/coupons"
+import { useCartStore } from "@/store/cart-store"
+import { formatPrice } from "@/lib/utils"
+import type { CartItemWithProduct } from "@/types"
 
 export default function CartPage() {
-  const [cartItems, setCartItems] = useState(initialCartItems)
+  const [cartItems, setCartItems] = useState<CartItemWithProduct[]>([])
+  const [loading, setLoading] = useState(true)
+  const [updating, setUpdating] = useState<string | null>(null)
   const [couponCode, setCouponCode] = useState("")
-  const [couponApplied, setCouponApplied] = useState(false)
+  const [couponApplied, setCouponApplied] = useState<{ code: string; discount: number } | null>(null)
+  const [validatingCoupon, setValidatingCoupon] = useState(false)
+  
+  const { setItems: setStoreItems, clearCart: clearStoreCart } = useCartStore()
 
-  const updateQuantity = (id: number, newQuantity: number) => {
+  useEffect(() => {
+    loadCart()
+  }, [])
+
+  const loadCart = async () => {
+    try {
+      setLoading(true)
+      const items = await getCart()
+      setCartItems(items)
+      setStoreItems(items)
+    } catch (error) {
+      console.error("Failed to load cart:", error)
+      toast.error("Failed to load cart")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUpdateQuantity = async (id: string, newQuantity: number) => {
     if (newQuantity < 1) return
-    setCartItems(items => items.map(item => 
-      item.id === id ? { ...item, quantity: newQuantity } : item
-    ))
+    try {
+      setUpdating(id)
+      const result = await updateCartQuantity(id, newQuantity)
+      if (result.success) {
+        setCartItems(items => items.map(item => 
+          item.id === id ? { ...item, quantity: newQuantity } : item
+        ))
+        setStoreItems(cartItems.map(item => 
+          item.id === id ? { ...item, quantity: newQuantity } : item
+        ))
+      } else {
+        toast.error(result.error)
+      }
+    } catch (error) {
+      console.error("Failed to update quantity:", error)
+      toast.error("Failed to update quantity")
+    } finally {
+      setUpdating(null)
+    }
   }
 
-  const removeItem = (id: number) => {
-    setCartItems(items => items.filter(item => item.id !== id))
+  const handleRemoveItem = async (id: string) => {
+    try {
+      setUpdating(id)
+      const result = await removeFromCart(id)
+      if (result.success) {
+        setCartItems(items => items.filter(item => item.id !== id))
+        setStoreItems(cartItems.filter(item => item.id !== id))
+        toast.success("Item removed from cart")
+      } else {
+        toast.error(result.error)
+      }
+    } catch (error) {
+      console.error("Failed to remove item:", error)
+      toast.error("Failed to remove item")
+    } finally {
+      setUpdating(null)
+    }
   }
 
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const discount = couponApplied ? Math.round(subtotal * 0.1) : 0
-  const shipping = subtotal >= 999 ? 0 : 99
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return
+    
+    try {
+      setValidatingCoupon(true)
+      const subtotal = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
+      const result = await validateCoupon(couponCode, subtotal)
+      
+      if (result.success) {
+        setCouponApplied({ code: couponCode.toUpperCase(), discount: result.data!.discount })
+        toast.success(`Coupon applied! You save ${formatPrice(result.data!.discount)}`)
+      } else {
+        toast.error(result.error)
+      }
+    } catch (error) {
+      console.error("Failed to validate coupon:", error)
+      toast.error("Failed to validate coupon")
+    } finally {
+      setValidatingCoupon(false)
+    }
+  }
+
+  const subtotal = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
+  const discount = couponApplied?.discount ?? 0
+  const shipping = subtotal >= 99900 ? 0 : 9900
   const total = subtotal - discount + shipping
 
-  const applyCoupon = () => {
-    if (couponCode.toLowerCase() === "welcome10") {
-      setCouponApplied(true)
-    }
+  if (loading) {
+    return (
+      <main className="min-h-screen pb-20 md:pb-0">
+        <Header />
+        <section className="py-16 md:py-24">
+          <div className="container mx-auto px-4 flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        </section>
+        <Footer />
+        <MobileNav />
+      </main>
+    )
   }
 
   if (cartItems.length === 0) {
@@ -97,11 +168,11 @@ export default function CartPage() {
                   transition={{ delay: index * 0.1 }}
                   className="flex gap-4 p-4 bg-card rounded-2xl"
                 >
-                  <Link href={`/products/${item.id}`} className="shrink-0">
+                  <Link href={`/products/${item.product.slug}`} className="shrink-0">
                     <div className="relative w-24 h-24 md:w-32 md:h-32 rounded-xl overflow-hidden bg-secondary/50">
                       <Image
-                        src={item.image}
-                        alt={item.name}
+                        src={item.product.images[0]}
+                        alt={item.product.name}
                         fill
                         className="object-cover"
                       />
@@ -110,43 +181,44 @@ export default function CartPage() {
                   <div className="flex-1 flex flex-col">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <span className="text-xs tracking-wider uppercase text-muted-foreground">
-                          {item.category}
-                        </span>
-                        <Link href={`/products/${item.id}`}>
+                        <Link href={`/products/${item.product.slug}`}>
                           <h3 className="font-medium font-serif hover:text-primary transition-colors">
-                            {item.name}
+                            {item.product.name}
                           </h3>
                         </Link>
+                        <p className="text-sm text-muted-foreground">Stock: {item.product.stock}</p>
                       </div>
                       <button
-                        onClick={() => removeItem(item.id)}
-                        className="p-2 hover:bg-secondary rounded-full transition-colors"
+                        onClick={() => handleRemoveItem(item.id)}
+                        disabled={updating === item.id}
+                        className="p-2 hover:bg-secondary rounded-full transition-colors disabled:opacity-50"
                       >
-                        <X className="h-4 w-4" />
+                        {updating === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
                       </button>
                     </div>
                     <div className="flex items-end justify-between mt-auto pt-4">
                       <div className="flex items-center border border-border rounded-full">
                         <button
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="p-2 hover:bg-secondary rounded-l-full transition-colors"
+                          onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
+                          disabled={updating === item.id || item.quantity <= 1}
+                          className="p-2 hover:bg-secondary rounded-l-full transition-colors disabled:opacity-50"
                         >
                           <Minus className="h-4 w-4" />
                         </button>
                         <span className="w-10 text-center text-sm font-medium">{item.quantity}</span>
                         <button
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="p-2 hover:bg-secondary rounded-r-full transition-colors"
+                          onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
+                          disabled={updating === item.id || item.quantity >= item.product.stock}
+                          className="p-2 hover:bg-secondary rounded-r-full transition-colors disabled:opacity-50"
                         >
                           <Plus className="h-4 w-4" />
                         </button>
                       </div>
                       <div className="text-right">
-                        <p className="text-lg font-semibold">₹{(item.price * item.quantity).toLocaleString('en-IN')}</p>
-                        {item.originalPrice && (
+                        <p className="text-lg font-semibold">{formatPrice(item.product.price * item.quantity)}</p>
+                        {item.product.originalPrice && (
                           <p className="text-sm text-muted-foreground line-through">
-                            ₹{(item.originalPrice * item.quantity).toLocaleString('en-IN')}
+                            {formatPrice(item.product.originalPrice * item.quantity)}
                           </p>
                         )}
                       </div>
@@ -181,49 +253,48 @@ export default function CartPage() {
                         onChange={(e) => setCouponCode(e.target.value)}
                         placeholder="Enter code"
                         className="pl-10 rounded-full"
-                        disabled={couponApplied}
+                        disabled={!!couponApplied}
                       />
                     </div>
                     <Button 
                       variant="outline" 
-                      onClick={applyCoupon}
-                      disabled={couponApplied || !couponCode}
+                      onClick={handleApplyCoupon}
+                      disabled={!!couponApplied || !couponCode || validatingCoupon}
                       className="rounded-full"
                     >
-                      {couponApplied ? "Applied" : "Apply"}
+                      {validatingCoupon ? <Loader2 className="h-4 w-4 animate-spin" /> : couponApplied ? "Applied" : "Apply"}
                     </Button>
                   </div>
                   {couponApplied && (
-                    <p className="text-sm text-primary mt-2">Coupon WELCOME10 applied! 10% off</p>
+                    <p className="text-sm text-primary mt-2">Coupon {couponApplied.code} applied! You save {formatPrice(couponApplied.discount)}</p>
                   )}
-                  <p className="text-xs text-muted-foreground mt-2">Try: WELCOME10 for 10% off</p>
                 </div>
 
                 <div className="space-y-3 py-4 border-t border-border">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>₹{subtotal.toLocaleString('en-IN')}</span>
+                    <span>{formatPrice(subtotal)}</span>
                   </div>
                   {discount > 0 && (
                     <div className="flex justify-between text-sm text-primary">
                       <span>Discount</span>
-                      <span>-₹{discount.toLocaleString('en-IN')}</span>
+                      <span>-{formatPrice(discount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Shipping</span>
-                    <span>{shipping === 0 ? "FREE" : `₹${shipping}`}</span>
+                    <span>{shipping === 0 ? "FREE" : formatPrice(shipping)}</span>
                   </div>
                   {shipping > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      Add ₹{(999 - subtotal).toLocaleString('en-IN')} more for free shipping
+                      Add {formatPrice(99900 - subtotal)} more for free shipping
                     </p>
                   )}
                 </div>
 
                 <div className="flex justify-between py-4 border-t border-border">
                   <span className="font-medium">Total</span>
-                  <span className="text-xl font-semibold">₹{total.toLocaleString('en-IN')}</span>
+                  <span className="text-xl font-semibold">{formatPrice(total)}</span>
                 </div>
 
                 <Button asChild className="w-full rounded-full py-6 text-base font-medium mt-4">
@@ -247,7 +318,7 @@ export default function CartPage() {
       <div className="fixed bottom-20 left-0 right-0 p-4 bg-background/95 backdrop-blur-lg border-t border-border md:hidden z-40">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm text-muted-foreground">{cartItems.length} items</span>
-          <span className="text-lg font-semibold">₹{total.toLocaleString('en-IN')}</span>
+          <span className="text-lg font-semibold">{formatPrice(total)}</span>
         </div>
         <Button asChild className="w-full rounded-full py-6">
           <Link href="/checkout">Proceed to Checkout</Link>

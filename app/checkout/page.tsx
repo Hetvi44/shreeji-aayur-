@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Header } from '@/components/header'
@@ -8,65 +9,247 @@ import { Footer } from '@/components/footer'
 import { MobileNav } from '@/components/mobile-nav'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ChevronLeft, CreditCard, Truck, Shield, CheckCircle2, Leaf } from 'lucide-react'
+import { ChevronLeft, CreditCard, Truck, Shield, CheckCircle2, Leaf, Loader2, Plus, MapPin } from 'lucide-react'
 import { motion } from 'framer-motion'
-
-const cartItems = [
-  {
-    id: 1,
-    name: 'Kumkumadi Radiance Serum',
-    price: 1299,
-    image:
-      'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?q=80&w=500&auto=format&fit=crop',
-    quantity: 1,
-  },
-  {
-    id: 5,
-    name: 'Brahmi Hair Oil',
-    price: 699,
-    image:
-      'https://images.unsplash.com/photo-1526947425960-945c6e72858f?q=80&w=500&auto=format&fit=crop',
-    quantity: 2,
-  },
-]
+import { toast } from 'sonner'
+import { getCart } from '@/lib/actions/cart'
+import { getUserProfile, addAddress } from '@/lib/actions/users'
+import { createOrder } from '@/lib/actions/orders'
+import { createRazorpayOrder, verifyRazorpayPayment } from '@/lib/actions/razorpay'
+import { useCartStore } from '@/store/cart-store'
+import { formatPrice } from '@/lib/utils'
+import type { CartItemWithProduct } from '@/types'
 
 type Step = 'address' | 'payment' | 'success'
 type PaymentMethod = 'cod' | 'razorpay'
 
+declare global {
+  interface Window {
+    Razorpay: any
+  }
+}
+
 export default function CheckoutPage() {
+  const router = useRouter()
   const [step, setStep] = useState<Step>('address')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('razorpay')
-
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const shipping = subtotal >= 999 ? 0 : 99
-  const total = subtotal + shipping
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [cartItems, setCartItems] = useState<CartItemWithProduct[]>([])
+  const [userAddresses, setUserAddresses] = useState<any[]>([])
+  const [selectedAddressId, setSelectedAddressId] = useState<string>('')
+  const [showNewAddressForm, setShowNewAddressForm] = useState(false)
+  
+  const { clearCart } = useCartStore()
 
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
+    name: '',
     phone: '',
-    address: '',
+    line1: '',
+    line2: '',
     city: '',
     state: '',
     pincode: '',
   })
 
+  useEffect(() => {
+    loadCheckoutData()
+  }, [])
+
+  const loadCheckoutData = async () => {
+    try {
+      const [cart, profile] = await Promise.all([getCart(), getUserProfile()])
+      
+      if (cart.length === 0) {
+        router.push('/cart')
+        return
+      }
+      
+      setCartItems(cart)
+      
+      if (profile) {
+        setUserAddresses(profile.addresses || [])
+        const defaultAddress = profile.addresses?.find((a: any) => a.isDefault)
+        if (defaultAddress) {
+          setSelectedAddressId(defaultAddress.id)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load checkout data:', error)
+      toast.error('Failed to load checkout data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const subtotal = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
+  const shipping = subtotal >= 99900 ? 0 : 9900
+  const total = subtotal + shipping
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
+  const handleAddAddress = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      setSubmitting(true)
+      const result = await addAddress({
+        name: formData.name,
+        phone: formData.phone,
+        line1: formData.line1,
+        line2: formData.line2 || undefined,
+        city: formData.city,
+        state: formData.state,
+        pincode: formData.pincode,
+        isDefault: userAddresses.length === 0,
+      })
+      
+      if (result.success) {
+        toast.success('Address added successfully')
+        setShowNewAddressForm(false)
+        loadCheckoutData()
+        if (result.data) {
+          setSelectedAddressId(result.data.id)
+        }
+      } else {
+        toast.error(result.error)
+      }
+    } catch (error) {
+      console.error('Failed to add address:', error)
+      toast.error('Failed to add address')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleAddressSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!selectedAddressId) {
+      toast.error('Please select or add an address')
+      return
+    }
     setStep('payment')
     window.scrollTo(0, 0)
   }
 
-  const handlePaymentSubmit = (e: React.FormEvent) => {
+  const loadRazorpayScript = (): Promise<void> => {
+    return new Promise((resolve) => {
+      if (window.Razorpay) {
+        resolve()
+        return
+      }
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.onload = () => resolve()
+      document.body.appendChild(script)
+    })
+  }
+
+  const handleRazorpayPayment = async (orderId: string, orderNumber: string) => {
+    try {
+      await loadRazorpayScript()
+      
+      const razorpayResult = await createRazorpayOrder(total, orderId)
+      if (!razorpayResult.success) {
+        toast.error(razorpayResult.error)
+        return
+      }
+
+      const options = {
+        key: razorpayResult.data!.key,
+        amount: razorpayResult.data!.amount,
+        currency: razorpayResult.data!.currency,
+        name: 'ShreejiAayur',
+        description: 'Ayurvedic Skincare',
+        order_id: razorpayResult.data!.razorpayOrderId,
+        handler: async (response: any) => {
+          const verifyResult = await verifyRazorpayPayment({
+            razorpayOrderId: response.razorpay_order_id,
+            razorpayPaymentId: response.razorpay_payment_id,
+            razorpaySignature: response.razorpay_signature,
+            orderId,
+          })
+          
+          if (verifyResult.success) {
+            clearCart()
+            toast.success('Payment successful!')
+            router.push(`/orders/${orderId}`)
+          } else {
+            toast.error('Payment verification failed')
+          }
+        },
+        prefill: {
+          name: userAddresses.find((a) => a.id === selectedAddressId)?.name || '',
+          contact: userAddresses.find((a) => a.id === selectedAddressId)?.phone || '',
+        },
+        theme: {
+          color: '#81ae74',
+        },
+        modal: {
+          ondismiss: () => {
+            toast.info('Payment cancelled')
+          },
+        },
+      }
+
+      const rzp = new window.Razorpay(options)
+      rzp.open()
+    } catch (error) {
+      console.error('Razorpay error:', error)
+      toast.error('Payment failed. Please try again.')
+    }
+  }
+
+  const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: integrate Razorpay SDK here
-    setStep('success')
-    window.scrollTo(0, 0)
+    
+    if (!selectedAddressId) {
+      toast.error('Please select an address')
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      
+      const orderResult = await createOrder({
+        addressId: selectedAddressId,
+        paymentMethod,
+      })
+
+      if (!orderResult.success) {
+        toast.error(orderResult.error)
+        return
+      }
+
+      if (paymentMethod === 'razorpay') {
+        await handleRazorpayPayment(orderResult.data!.orderId, orderResult.data!.orderNumber)
+      } else {
+        clearCart()
+        toast.success('Order placed successfully!')
+        router.push(`/orders/${orderResult.data!.orderId}`)
+      }
+    } catch (error) {
+      console.error('Failed to place order:', error)
+      toast.error('Failed to place order. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen pb-20 md:pb-0">
+        <Header />
+        <section className="py-16 md:py-24">
+          <div className="container mx-auto px-4 flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        </section>
+        <Footer />
+        <MobileNav />
+      </main>
+    )
   }
 
   if (step === 'success') {
@@ -93,18 +276,7 @@ export default function CheckoutPage() {
             <p className="text-muted-foreground max-w-md mb-2">
               Thank you for choosing ShreejiAayur. Your order has been placed successfully.
             </p>
-            <p className="text-muted-foreground mb-8">
-              Order confirmation sent to{' '}
-              <span className="text-foreground font-medium">{formData.email || 'your email'}</span>
-            </p>
-            <div className="bg-secondary/50 rounded-2xl p-6 mb-8 text-left max-w-sm mx-auto">
-              <p className="text-sm font-medium mb-1">Estimated Delivery</p>
-              <p className="text-muted-foreground text-sm">5–7 business days</p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Order ID: <span className="font-mono font-medium">SA{Date.now().toString().slice(-8)}</span>
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <div className="flex flex-col sm:flex-row gap-3 justify-center mt-8">
               <Button size="lg" className="rounded-full px-8" asChild>
                 <Link href="/products">Continue Shopping</Link>
               </Button>
@@ -119,6 +291,8 @@ export default function CheckoutPage() {
       </main>
     )
   }
+
+  const selectedAddress = userAddresses.find((a) => a.id === selectedAddressId)
 
   return (
     <main className="min-h-screen pb-20 md:pb-0">
@@ -169,140 +343,209 @@ export default function CheckoutPage() {
           {/* Form */}
           <div>
             {step === 'address' && (
-              <form onSubmit={handleAddressSubmit} className="space-y-6">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2" htmlFor="firstName">
-                      First Name
-                    </label>
-                    <Input
-                      id="firstName"
-                      name="firstName"
-                      value={formData.firstName}
-                      onChange={handleInputChange}
-                      placeholder="Priya"
-                      required
-                      className="rounded-xl"
-                    />
+              <div className="space-y-6">
+                {/* Saved Addresses */}
+                {userAddresses.length > 0 && (
+                  <div className="space-y-4">
+                    <h2 className="text-lg font-medium font-serif">Select Delivery Address</h2>
+                    <div className="space-y-3">
+                      {userAddresses.map((address) => (
+                        <label
+                          key={address.id}
+                          className={`flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-colors ${
+                            selectedAddressId === address.id
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="address"
+                            value={address.id}
+                            checked={selectedAddressId === address.id}
+                            onChange={(e) => setSelectedAddressId(e.target.value)}
+                            className="accent-primary mt-1"
+                          />
+                          <div className="flex items-start gap-3">
+                            <MapPin className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-medium text-sm">{address.name}</p>
+                              <p className="text-sm text-muted-foreground">{address.phone}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {address.line1}, {address.line2 && `${address.line2}, `}{address.city}, {address.state} - {address.pincode}
+                              </p>
+                              {address.isDefault && (
+                                <span className="inline-block text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full mt-2">
+                                  Default
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" htmlFor="lastName">
-                      Last Name
-                    </label>
-                    <Input
-                      id="lastName"
-                      name="lastName"
-                      value={formData.lastName}
-                      onChange={handleInputChange}
-                      placeholder="Sharma"
-                      required
-                      className="rounded-xl"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2" htmlFor="email">
-                    Email
-                  </label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    placeholder="priya@example.com"
-                    required
-                    className="rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2" htmlFor="phone">
-                    Phone Number
-                  </label>
-                  <Input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    placeholder="+91 98765 43210"
-                    required
-                    className="rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2" htmlFor="address">
-                    Address
-                  </label>
-                  <Input
-                    id="address"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    placeholder="House/Flat No., Street, Area"
-                    required
-                    className="rounded-xl"
-                  />
-                </div>
-                <div className="grid sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2" htmlFor="city">
-                      City
-                    </label>
-                    <Input
-                      id="city"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleInputChange}
-                      placeholder="Mumbai"
-                      required
-                      className="rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" htmlFor="state">
-                      State
-                    </label>
-                    <Input
-                      id="state"
-                      name="state"
-                      value={formData.state}
-                      onChange={handleInputChange}
-                      placeholder="Maharashtra"
-                      required
-                      className="rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2" htmlFor="pincode">
-                      Pincode
-                    </label>
-                    <Input
-                      id="pincode"
-                      name="pincode"
-                      value={formData.pincode}
-                      onChange={handleInputChange}
-                      placeholder="400001"
-                      required
-                      maxLength={6}
-                      className="rounded-xl"
-                    />
-                  </div>
-                </div>
-                <Button type="submit" size="lg" className="w-full rounded-full text-base">
-                  Continue to Payment
-                </Button>
-              </form>
+                )}
+
+                {/* Add New Address */}
+                {!showNewAddressForm ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowNewAddressForm(true)}
+                    className="w-full rounded-full"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add New Address
+                  </Button>
+                ) : (
+                  <form onSubmit={handleAddAddress} className="space-y-4 p-6 bg-secondary/30 rounded-2xl">
+                    <h3 className="font-medium font-serif">Add New Address</h3>
+                    <div>
+                      <label className="block text-sm font-medium mb-2" htmlFor="name">
+                        Full Name
+                      </label>
+                      <Input
+                        id="name"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        placeholder="Priya Sharma"
+                        required
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2" htmlFor="phone">
+                        Phone Number
+                      </label>
+                      <Input
+                        id="phone"
+                        name="phone"
+                        type="tel"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        placeholder="+91 98765 43210"
+                        required
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2" htmlFor="line1">
+                        Address Line 1
+                      </label>
+                      <Input
+                        id="line1"
+                        name="line1"
+                        value={formData.line1}
+                        onChange={handleInputChange}
+                        placeholder="House/Flat No., Street, Area"
+                        required
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2" htmlFor="line2">
+                        Address Line 2 (Optional)
+                      </label>
+                      <Input
+                        id="line2"
+                        name="line2"
+                        value={formData.line2}
+                        onChange={handleInputChange}
+                        placeholder="Landmark, Building name"
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2" htmlFor="city">
+                          City
+                        </label>
+                        <Input
+                          id="city"
+                          name="city"
+                          value={formData.city}
+                          onChange={handleInputChange}
+                          placeholder="Mumbai"
+                          required
+                          className="rounded-xl"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2" htmlFor="state">
+                          State
+                        </label>
+                        <Input
+                          id="state"
+                          name="state"
+                          value={formData.state}
+                          onChange={handleInputChange}
+                          placeholder="Maharashtra"
+                          required
+                          className="rounded-xl"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2" htmlFor="pincode">
+                          Pincode
+                        </label>
+                        <Input
+                          id="pincode"
+                          name="pincode"
+                          value={formData.pincode}
+                          onChange={handleInputChange}
+                          placeholder="400001"
+                          required
+                          maxLength={6}
+                          className="rounded-xl"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <Button type="submit" disabled={submitting} className="flex-1 rounded-full">
+                        {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                        Save Address
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowNewAddressForm(false)}
+                        className="rounded-full"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                )}
+
+                {userAddresses.length > 0 && !showNewAddressForm && (
+                  <Button
+                    type="button"
+                    onClick={handleAddressSubmit}
+                    disabled={!selectedAddressId}
+                    size="lg"
+                    className="w-full rounded-full text-base"
+                  >
+                    Continue to Payment
+                  </Button>
+                )}
+              </div>
             )}
 
             {step === 'payment' && (
               <form onSubmit={handlePaymentSubmit} className="space-y-6">
-                <p className="text-sm text-muted-foreground mb-4">
-                  Delivering to:{' '}
-                  <span className="text-foreground font-medium">
-                    {formData.address}, {formData.city} — {formData.pincode}
-                  </span>
-                </p>
+                {selectedAddress && (
+                  <div className="p-4 bg-secondary/30 rounded-2xl">
+                    <p className="text-sm font-medium mb-2">Delivering to:</p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedAddress.name} • {selectedAddress.phone}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedAddress.line1}, {selectedAddress.line2 && `${selectedAddress.line2}, `}{selectedAddress.city}, {selectedAddress.state} - {selectedAddress.pincode}
+                    </p>
+                  </div>
+                )}
 
                 {/* Payment Options */}
                 <div className="space-y-3">
@@ -363,10 +606,11 @@ export default function CheckoutPage() {
                   </p>
                 </div>
 
-                <Button type="submit" size="lg" className="w-full rounded-full text-base">
+                <Button type="submit" disabled={submitting} size="lg" className="w-full rounded-full text-base">
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   {paymentMethod === 'razorpay'
-                    ? `Pay ₹${total.toLocaleString('en-IN')} Securely`
-                    : `Place Order — ₹${total.toLocaleString('en-IN')}`}
+                    ? `Pay ${formatPrice(total)} Securely`
+                    : `Place Order — ${formatPrice(total)}`}
                 </Button>
               </form>
             )}
@@ -383,19 +627,19 @@ export default function CheckoutPage() {
                   <div key={item.id} className="flex items-center gap-3">
                     <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-secondary shrink-0">
                       <Image
-                        src={item.image}
-                        alt={item.name}
+                        src={item.product.images[0]}
+                        alt={item.product.name}
                         fill
                         className="object-cover"
                         sizes="56px"
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium line-clamp-1">{item.name}</p>
+                      <p className="text-sm font-medium line-clamp-1">{item.product.name}</p>
                       <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
                     </div>
                     <span className="text-sm font-semibold shrink-0">
-                      ₹{(item.price * item.quantity).toLocaleString('en-IN')}
+                      {formatPrice(item.product.price * item.quantity)}
                     </span>
                   </div>
                 ))}
@@ -405,17 +649,17 @@ export default function CheckoutPage() {
               <div className="space-y-3 border-t border-border pt-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span>₹{subtotal.toLocaleString('en-IN')}</span>
+                  <span>{formatPrice(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Shipping</span>
                   <span className={shipping === 0 ? 'text-primary font-medium' : ''}>
-                    {shipping === 0 ? 'FREE' : `₹${shipping}`}
+                    {shipping === 0 ? 'FREE' : formatPrice(shipping)}
                   </span>
                 </div>
                 <div className="flex justify-between font-semibold text-lg pt-2 border-t border-border">
                   <span>Total</span>
-                  <span>₹{total.toLocaleString('en-IN')}</span>
+                  <span>{formatPrice(total)}</span>
                 </div>
               </div>
 

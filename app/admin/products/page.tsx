@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import Image from "next/image"
-import { Search, Plus, Edit2, Trash2, Copy, SlidersHorizontal } from "lucide-react"
+import { Search, Plus, Edit2, Trash2, Copy, SlidersHorizontal, Loader2 } from "lucide-react"
 import {
   MiniStats, StatusBadge, TableCard, ActionBtn, TH, TD,
 } from "@/components/admin/shared"
@@ -11,19 +11,10 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { products } from "@/lib/products"
-import type { Product } from "@/lib/products"
+import { getAdminProducts } from "@/lib/actions/products"
+import type { ProductWithCategory } from "@/types"
 
 const CATEGORIES = ["All", "Face Care", "Skin Care", "Hair Care", "Body Care"]
-
-// Mock stock data (replace with DB later)
-const stockMap: Record<number, { stock: number; sales: number }> = {
-  1: { stock: 42, sales: 186 }, 2: { stock: 67, sales: 134 }, 3: { stock: 8, sales: 97 },
-  4: { stock: 31, sales: 78 }, 5: { stock: 0, sales: 212 }, 6: { stock: 19, sales: 65 },
-  7: { stock: 5, sales: 88 }, 8: { stock: 93, sales: 201 }, 9: { stock: 24, sales: 54 },
-  10: { stock: 38, sales: 72 }, 11: { stock: 12, sales: 99 }, 12: { stock: 44, sales: 63 },
-  13: { stock: 29, sales: 45 }, 14: { stock: 7, sales: 38 }, 15: { stock: 56, sales: 52 },
-}
 
 function getStockStatus(stock: number) {
   if (stock === 0) return "out"
@@ -35,9 +26,27 @@ export default function AdminProductsPage() {
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState("All")
   const [showAddModal, setShowAddModal] = useState(false)
-  const [editProduct, setEditProduct] = useState<Product | null>(null)
-  const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [editProduct, setEditProduct] = useState<ProductWithCategory | null>(null)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
   const [toast, setToast] = useState("")
+  const [products, setProducts] = useState<ProductWithCategory[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadProducts()
+  }, [])
+
+  const loadProducts = async () => {
+    try {
+      setLoading(true)
+      const data = await getAdminProducts()
+      setProducts(data)
+    } catch (error) {
+      console.error("Failed to load products:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -45,18 +54,26 @@ export default function AdminProductsPage() {
   }
 
   const filtered = useMemo(() => {
-    return products.filter((p) => {
+    return products.filter((p: ProductWithCategory) => {
       const matchSearch =
         p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.category.toLowerCase().includes(search.toLowerCase())
-      const matchCat = category === "All" || p.category === category
+        p.category.name.toLowerCase().includes(search.toLowerCase())
+      const matchCat = category === "All" || p.category.name === category
       return matchSearch && matchCat
     })
-  }, [search, category])
+  }, [search, category, products])
 
-  const totalStock = Object.values(stockMap).reduce((s, v) => s + v.stock, 0)
-  const lowStock = Object.values(stockMap).filter((v) => v.stock < 10 && v.stock > 0).length
-  const outOfStock = Object.values(stockMap).filter((v) => v.stock === 0).length
+  const totalStock = products.reduce((s, p) => s + p.stock, 0)
+  const lowStock = products.filter((p) => p.stock < 10 && p.stock > 0).length
+  const outOfStock = products.filter((p) => p.stock === 0).length
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">
@@ -73,7 +90,7 @@ export default function AdminProductsPage() {
           { label: "In Stock",       value: String(products.length - outOfStock), color: "text-[#5c8a4e]" },
           { label: "Low Stock",      value: String(lowStock),          color: "text-amber-600" },
           { label: "Out of Stock",   value: String(outOfStock),        color: "text-red-600" },
-          { label: "Categories",     value: "4",                       color: "text-[#b2997d]" },
+          { label: "Categories",     value: String(new Set(products.map(p => p.category.name)).size), color: "text-[#b2997d]" },
         ]}
       />
 
@@ -125,14 +142,12 @@ export default function AdminProductsPage() {
               <th className={TH}>Price</th>
               <th className={TH}>Stock</th>
               <th className={TH}>Status</th>
-              <th className={TH}>Sales</th>
               <th className={TH}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((p) => {
-              const s = stockMap[p.id] ?? { stock: 50, sales: 20 }
-              const status = getStockStatus(s.stock)
+            {filtered.map((p: ProductWithCategory) => {
+              const status = getStockStatus(p.stock)
               const discount = p.originalPrice
                 ? Math.round(((p.originalPrice - p.price) / p.originalPrice) * 100)
                 : null
@@ -142,7 +157,7 @@ export default function AdminProductsPage() {
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl overflow-hidden bg-[#eef5ec] shrink-0 relative">
                         <Image
-                          src={p.image}
+                          src={p.images[0] || '/placeholder-image.jpg'}
                           alt={p.name}
                           fill
                           className="object-cover"
@@ -151,15 +166,15 @@ export default function AdminProductsPage() {
                       </div>
                       <div>
                         <p className="font-medium text-[#0c0f0b] line-clamp-1 max-w-[200px]">{p.name}</p>
-                        <p className="text-[10px] text-[#6b6356]">ID: SA-P{String(p.id).padStart(3, "0")}</p>
+                        <p className="text-[10px] text-[#6b6356]">ID: {p.id.slice(0, 8)}</p>
                       </div>
                     </div>
                   </td>
-                  <td className={TD}><span className="text-[#6b6356]">{p.category}</span></td>
+                  <td className={TD}><span className="text-[#6b6356]">{p.category.name}</span></td>
                   <td className={TD}>
-                    <p className="font-semibold">₹{p.price.toLocaleString("en-IN")}</p>
+                    <p className="font-semibold">{(p.price / 100).toLocaleString("en-IN", { style: "currency", currency: "INR" })}</p>
                     {p.originalPrice && (
-                      <p className="text-[10px] text-[#6b6356] line-through">₹{p.originalPrice.toLocaleString("en-IN")}</p>
+                      <p className="text-[10px] text-[#6b6356] line-through">{(p.originalPrice / 100).toLocaleString("en-IN", { style: "currency", currency: "INR" })}</p>
                     )}
                     {discount && (
                       <span className="text-[9px] font-bold text-[#5c8a4e] bg-[#eef5ec] px-1.5 py-0.5 rounded-full">
@@ -170,15 +185,14 @@ export default function AdminProductsPage() {
                   <td className={TD}>
                     <span
                       className={`font-semibold ${
-                        s.stock === 0 ? "text-red-600" : s.stock < 10 ? "text-amber-600" : "text-[#0c0f0b]"
+                        p.stock === 0 ? "text-red-600" : p.stock < 10 ? "text-amber-600" : "text-[#0c0f0b]"
                       }`}
                     >
-                      {s.stock}
+                      {p.stock}
                     </span>
                     <span className="text-[#6b6356]"> units</span>
                   </td>
                   <td className={TD}><StatusBadge status={status} /></td>
-                  <td className={TD}><span className="font-medium">{s.sales}</span> sold</td>
                   <td className={TD}>
                     <div className="flex items-center gap-0.5">
                       <ActionBtn onClick={() => { setEditProduct(p); showToast(`Editing: ${p.name}`) }}>
@@ -203,7 +217,7 @@ export default function AdminProductsPage() {
       <AddProductModal
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
-        onSave={() => { setShowAddModal(false); showToast("Product added successfully!") }}
+        onSave={() => { setShowAddModal(false); showToast("Product added successfully!"); loadProducts() }}
       />
 
       {/* Delete Confirm */}
@@ -219,7 +233,7 @@ export default function AdminProductsPage() {
             </Button>
             <Button
               className="rounded-full bg-red-600 hover:bg-red-700 text-white"
-              onClick={() => { setDeleteId(null); showToast("Product deleted!") }}
+              onClick={() => { setDeleteId(null); showToast("Product deleted!"); loadProducts() }}
             >
               Delete
             </Button>

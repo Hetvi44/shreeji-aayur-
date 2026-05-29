@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, use } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { notFound } from "next/navigation"
@@ -8,9 +8,14 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { MobileNav } from "@/components/mobile-nav"
 import { Button } from "@/components/ui/button"
-import { getProductsByCategory, categories } from "@/lib/products"
-import { Heart, Plus } from "lucide-react"
+import { getProducts } from "@/lib/actions/products"
+import { getCategories } from "@/lib/actions/categories"
+import { toggleWishlist } from "@/lib/actions/users"
+import { useWishlistStore } from "@/store/wishlist-store"
+import { Heart, Plus, Loader2 } from "lucide-react"
 import { motion } from "framer-motion"
+import { formatPrice } from "@/lib/utils"
+import type { ProductWithCategory } from "@/types"
 
 const categoryImages: Record<string, string> = {
   "skin-care": "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?q=80&w=1200&auto=format&fit=crop",
@@ -27,14 +32,70 @@ const categoryDescriptions: Record<string, string> = {
 }
 
 export default function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
-  const resolvedParams = use(params)
-  const category = categories.find(c => c.slug === resolvedParams.slug)
-  const products = getProductsByCategory(resolvedParams.slug)
-  const [wishlist, setWishlist] = useState<number[]>([])
+  const [slug, setSlug] = useState<string>("")
+  const [category, setCategory] = useState<any>(null)
+  const [products, setProducts] = useState<ProductWithCategory[]>([])
+  const [loading, setLoading] = useState(true)
   const [sortBy, setSortBy] = useState("featured")
+  const [togglingWishlist, setTogglingWishlist] = useState<string | null>(null)
+  
+  const { isWishlisted, toggle: toggleWishlistStore } = useWishlistStore()
 
-  if (!category || products.length === 0) {
-    notFound()
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    try {
+      const resolvedParams = await params
+      const currentSlug = resolvedParams.slug
+      setSlug(currentSlug)
+      
+      const [productsData, categoriesData] = await Promise.all([
+        getProducts({ category: currentSlug }),
+        getCategories(),
+      ])
+      
+      const categoryData = categoriesData.find((c: any) => c.slug === currentSlug)
+      
+      if (!categoryData || productsData.length === 0) {
+        notFound()
+        return
+      }
+      
+      setCategory(categoryData)
+      setProducts(productsData)
+    } catch (error) {
+      console.error("Failed to load category data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleToggleWishlist = async (productId: string) => {
+    try {
+      setTogglingWishlist(productId)
+      const result = await toggleWishlist(productId)
+      
+      if (result.success) {
+        toggleWishlistStore(productId)
+      }
+    } catch (error) {
+      console.error('Failed to toggle wishlist:', error)
+    } finally {
+      setTogglingWishlist(null)
+    }
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen pb-20 md:pb-0">
+        <Header />
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </main>
+    )
   }
 
   const sortedProducts = [...products].sort((a, b) => {
@@ -43,10 +104,6 @@ export default function CategoryPage({ params }: { params: Promise<{ slug: strin
     return 0
   })
 
-  const toggleWishlist = (id: number) => {
-    setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
-  }
-
   return (
     <main className="min-h-screen pb-20 md:pb-0">
       <Header />
@@ -54,7 +111,7 @@ export default function CategoryPage({ params }: { params: Promise<{ slug: strin
       {/* Hero Banner */}
       <section className="relative h-64 md:h-80 overflow-hidden">
         <Image
-          src={categoryImages[resolvedParams.slug] || categoryImages["skin-care"]}
+          src={categoryImages[slug] || categoryImages["skin-care"]}
           alt={category.name}
           fill
           className="object-cover"
@@ -79,7 +136,7 @@ export default function CategoryPage({ params }: { params: Promise<{ slug: strin
                 {category.name}
               </h1>
               <p className="text-background/80 max-w-xl hidden md:block">
-                {categoryDescriptions[resolvedParams.slug]}
+                {categoryDescriptions[slug]}
               </p>
             </motion.div>
           </div>
@@ -124,10 +181,10 @@ export default function CategoryPage({ params }: { params: Promise<{ slug: strin
                 }}
                 className="group relative bg-card rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300"
               >
-                <Link href={`/products/${product.id}`}>
+                <Link href={`/products/${product.slug}`}>
                   <div className="relative aspect-square overflow-hidden bg-secondary/50">
                     <Image
-                      src={product.image}
+                      src={product.images[0] || '/placeholder-image.jpg'}
                       alt={product.name}
                       fill
                       className="object-cover transition-transform duration-500 group-hover:scale-105"
@@ -141,31 +198,36 @@ export default function CategoryPage({ params }: { params: Promise<{ slug: strin
                 </Link>
                 
                 <button
-                  onClick={() => toggleWishlist(product.id)}
-                  className="absolute top-3 right-3 p-2.5 rounded-full bg-card/90 backdrop-blur-sm hover:bg-card transition-colors shadow-sm z-10"
+                  onClick={() => handleToggleWishlist(product.id)}
+                  disabled={togglingWishlist === product.id}
+                  className="absolute top-3 right-3 p-2.5 rounded-full bg-card/90 backdrop-blur-sm hover:bg-card transition-colors shadow-sm z-10 disabled:opacity-50"
                 >
-                  <Heart
-                    className={`h-4 w-4 transition-colors ${
-                      wishlist.includes(product.id) ? "fill-destructive text-destructive" : "text-muted-foreground"
-                    }`}
-                  />
+                  {togglingWishlist === product.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Heart
+                      className={`h-4 w-4 transition-colors ${
+                        isWishlisted(product.id) ? "fill-destructive text-destructive" : "text-muted-foreground"
+                      }`}
+                    />
+                  )}
                 </button>
 
                 <div className="p-4">
                   <span className="text-xs tracking-wider uppercase text-muted-foreground">
-                    {product.category}
+                    {product.category.name}
                   </span>
-                  <Link href={`/products/${product.id}`}>
+                  <Link href={`/products/${product.slug}`}>
                     <h3 className="text-base font-medium mt-1 mb-3 line-clamp-1 font-serif hover:text-primary transition-colors">
                       {product.name}
                     </h3>
                   </Link>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-semibold">₹{product.price.toLocaleString('en-IN')}</span>
+                      <span className="text-lg font-semibold">{formatPrice(product.price)}</span>
                       {product.originalPrice && (
                         <span className="text-sm text-muted-foreground line-through">
-                          ₹{product.originalPrice.toLocaleString('en-IN')}
+                          {formatPrice(product.originalPrice)}
                         </span>
                       )}
                     </div>
