@@ -1,125 +1,76 @@
-"use server"
+'use server'
 
-import { revalidatePath } from "next/cache"
-import { db } from "@/lib/db"
-import type { ActionResult } from "@/types"
+import { db } from '@/lib/db'
 
-// ─── VALIDATE COUPON ─────────────────────────────────────────
-export async function validateCoupon(
-  code: string,
-  orderTotal: number // in paise
-): Promise<ActionResult<{ discount: number; type: string; value: number }>> {
+export async function validateCoupon(code: string, orderTotal: number) {
   try {
     const coupon = await db.coupon.findUnique({
-      where: { code: code.toUpperCase(), isActive: true },
+      where: { code: code.toUpperCase() },
     })
 
-    if (!coupon) {
-      return { success: false, error: "Invalid coupon code" }
+    if (!coupon) return { valid: false, message: 'Coupon not found' }
+    if (!coupon.isActive) return { valid: false, message: 'Coupon is inactive' }
+    if (coupon.usedCount >= coupon.maxUses) return { valid: false, message: 'Coupon usage limit reached' }
+    if (coupon.expiresAt && coupon.expiresAt < new Date()) return { valid: false, message: 'Coupon expired' }
+    if (orderTotal < coupon.minOrderValue) return { valid: false, message: `Minimum order value ₹${coupon.minOrderValue / 100} required` }
+
+    let discount = 0
+    if (coupon.type === 'PERCENTAGE') {
+      discount = Math.floor((orderTotal * coupon.value) / 100)
+    } else {
+      discount = coupon.value
     }
 
-    if (coupon.expiresAt && coupon.expiresAt < new Date()) {
-      return { success: false, error: "This coupon has expired" }
-    }
-
-    if (coupon.usedCount >= coupon.maxUses) {
-      return { success: false, error: "This coupon has reached its usage limit" }
-    }
-
-    if (orderTotal < coupon.minOrderValue) {
-      const minRupees = Math.round(coupon.minOrderValue / 100)
-      return {
-        success: false,
-        error: `Minimum order value of ₹${minRupees} required for this coupon`,
-      }
-    }
-
-    const discount =
-      coupon.type === "PERCENTAGE"
-        ? Math.round((orderTotal * coupon.value) / 100)
-        : coupon.value
-
-    return {
-      success: true,
-      data: { discount, type: coupon.type, value: coupon.value },
-    }
+    return { valid: true, discount, coupon }
   } catch (error) {
-    console.error("[validateCoupon]", error)
-    return { success: false, error: "Failed to validate coupon" }
+    console.error('[validateCoupon]', error)
+    throw new Error('Failed to validate coupon')
   }
 }
 
-// ─── GET ALL COUPONS (ADMIN) ─────────────────────────────────
+export async function createCoupon(data: any) {
+  try {
+    const coupon = await db.coupon.create({
+      data,
+    })
+    return coupon
+  } catch (error) {
+    console.error('[createCoupon]', error)
+    throw new Error('Failed to create coupon')
+  }
+}
+
+export async function toggleCoupon(couponId: string, isActive: boolean) {
+  try {
+    return await db.coupon.update({
+      where: { id: couponId },
+      data: { isActive },
+    })
+  } catch (error) {
+    console.error('[toggleCoupon]', error)
+    throw new Error('Failed to toggle coupon')
+  }
+}
+
+export async function deleteCoupon(couponId: string) {
+  try {
+    await db.coupon.delete({
+      where: { id: couponId },
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('[deleteCoupon]', error)
+    throw new Error('Failed to delete coupon')
+  }
+}
+
 export async function getAdminCoupons() {
   try {
     return await db.coupon.findMany({
-      include: {
-        _count: { select: { orders: true } },
-      },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
     })
   } catch (error) {
-    console.error("[getAdminCoupons]", error)
-    return []
-  }
-}
-
-// ─── CREATE COUPON ───────────────────────────────────────────
-export async function createCoupon(input: {
-  code: string
-  type: "PERCENTAGE" | "FIXED"
-  value: number
-  minOrderValue?: number
-  maxUses?: number
-  expiresAt?: string
-}): Promise<ActionResult<{ id: string }>> {
-  try {
-    const existing = await db.coupon.findUnique({
-      where: { code: input.code.toUpperCase() },
-    })
-    if (existing) {
-      return { success: false, error: "Coupon code already exists" }
-    }
-
-    const coupon = await db.coupon.create({
-      data: {
-        code:          input.code.toUpperCase(),
-        type:          input.type,
-        value:         input.type === "PERCENTAGE" ? input.value : input.value * 100,
-        minOrderValue: (input.minOrderValue ?? 0) * 100,
-        maxUses:       input.maxUses ?? 100,
-        expiresAt:     input.expiresAt ? new Date(input.expiresAt) : null,
-      },
-    })
-
-    revalidatePath("/admin/coupons")
-    return { success: true, data: { id: coupon.id } }
-  } catch (error) {
-    console.error("[createCoupon]", error)
-    return { success: false, error: "Failed to create coupon" }
-  }
-}
-
-// ─── TOGGLE COUPON STATUS ────────────────────────────────────
-export async function toggleCoupon(id: string, isActive: boolean): Promise<ActionResult> {
-  try {
-    await db.coupon.update({ where: { id }, data: { isActive } })
-    revalidatePath("/admin/coupons")
-    return { success: true, data: undefined }
-  } catch (error) {
-    console.error("[toggleCoupon]", error)
-    return { success: false, error: "Failed to update coupon" }
-  }
-}
-
-// ─── DELETE COUPON ───────────────────────────────────────────
-export async function deleteCoupon(id: string): Promise<ActionResult> {
-  try {
-    await db.coupon.delete({ where: { id } })
-    revalidatePath("/admin/coupons")
-    return { success: true, data: undefined }
-  } catch (error) {
-    console.error("[deleteCoupon]", error)
-    return { success: false, error: "Failed to delete coupon" }
+    console.error('[getAdminCoupons]', error)
+    throw new Error('Failed to fetch coupons')
   }
 }

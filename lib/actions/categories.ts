@@ -1,28 +1,29 @@
-"use server"
+'use server'
 
-import { db } from "@/lib/db"
+import { db } from '@/lib/db'
+import { Category } from '@/types'
 
-// ─── GET ALL CATEGORIES ─────────────────────────────────────
-export async function getCategories() {
+export async function getCategories(): Promise<Category[]> {
   try {
-    return await db.category.findMany({
+    const categories = await db.category.findMany({
       where: { isActive: true },
-      orderBy: { name: "asc" },
+      orderBy: { sortOrder: 'asc' },
     })
+    return categories
   } catch (error) {
-    console.error("[getCategories]", error)
-    return []
+    console.error('[getCategories]', error)
+    throw new Error('Failed to fetch categories')
   }
 }
 
-// ─── GET CATEGORY BY SLUG ────────────────────────────────────
-export async function getCategoryBySlug(slug: string) {
+export async function getCategoryBySlug(slug: string): Promise<Category | null> {
   try {
-    return await db.category.findUnique({
-      where: { slug, isActive: true },
+    const category = await db.category.findUnique({
+      where: { slug },
     })
+    return category
   } catch (error) {
-    console.error("[getCategoryBySlug]", error)
-    return null
+    console.error('[getCategoryBySlug]', error)
+    throw new Error('Failed to fetch category')
   }
 }
