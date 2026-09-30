@@ -9,7 +9,7 @@ import { MobileNav } from '@/components/mobile-nav'
 import { Button } from '@/components/ui/button'
 import { ProductCard } from '@/components/product-card'
 import { addToCart } from '@/lib/actions/cart'
-import { toggleWishlist } from '@/lib/actions/users'
+import { toggleWishlist } from '@/lib/actions/wishlist'
 import { useCartStore } from '@/store/cart-store'
 import { useWishlistStore } from '@/store/wishlist-store'
 import { formatPrice } from '@/lib/utils'
@@ -91,10 +91,14 @@ export default function ProductDetailClient({ product, relatedProducts }: Props)
       
       if (result.success) {
         const cartItem = {
-          id: `${product.id}-${Date.now()}`,
+          id: result.data?.id ?? `${product.id}-${Date.now()}`,
           productId: product.id,
+          name: product.name,
+          price: product.price,
+          originalPrice: product.originalPrice ?? undefined,
+          image: product.images[0] ?? '',
           quantity,
-          product,
+          stock: product.stock,
         }
         addItem(cartItem)
         toast.success(`Added ${quantity} ${product.name} to cart`)

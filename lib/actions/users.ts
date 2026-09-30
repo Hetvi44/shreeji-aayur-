@@ -40,42 +40,44 @@ export async function getUserProfile() {
 
 export async function updateProfile(data: any) {
   const { userId } = await auth()
-  if (!userId) throw new Error('Unauthorized')
+  if (!userId) return { success: false, error: 'Unauthorized' }
 
   try {
     const user = await db.user.findUnique({
       where: { clerkId: userId },
     })
 
-    if (!user) throw new Error('User not found')
+    if (!user) return { success: false, error: 'User not found' }
 
-    return await db.user.update({
+    const updatedUser = await db.user.update({
       where: { id: user.id },
       data,
     })
+    return { success: true, data: updatedUser }
   } catch (error) {
     console.error('[updateProfile]', error)
-    throw new Error('Failed to update profile')
+    return { success: false, error: 'Failed to update profile' }
   }
 }
 
 export async function addAddress(data: any) {
   const { userId } = await auth()
-  if (!userId) throw new Error('Unauthorized')
+  if (!userId) return { success: false, error: 'Unauthorized' }
 
   try {
     const user = await db.user.findUnique({
       where: { clerkId: userId },
     })
 
-    if (!user) throw new Error('User not found')
+    if (!user) return { success: false, error: 'User not found' }
 
-    return await db.address.create({
+    const address = await db.address.create({
       data: { ...data, userId: user.id },
     })
+    return { success: true, data: address }
   } catch (error) {
     console.error('[addAddress]', error)
-    throw new Error('Failed to add address')
+    return { success: false, error: 'Failed to add address' }
   }
 }
 

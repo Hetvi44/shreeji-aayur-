@@ -46,6 +46,10 @@ export interface Product {
   updatedAt: Date
 }
 
+export type ProductWithCategory = Product & {
+  category: Category
+}
+
 export interface Address {
   id: string
   userId: string
@@ -104,6 +108,10 @@ export interface CartItem {
   product?: Product
   createdAt: Date
   updatedAt: Date
+}
+
+export type CartItemWithProduct = CartItem & {
+  product: Product
 }
 
 export interface WishlistItem {

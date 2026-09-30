@@ -60,12 +60,12 @@ export default function CheckoutPage() {
     try {
       const [cart, profile] = await Promise.all([getCart(), getUserProfile()])
       
-      if (cart.length === 0) {
+      if (cart.items.length === 0) {
         router.push('/cart')
         return
       }
       
-      setCartItems(cart)
+      setCartItems(cart.items)
       
       if (profile) {
         setUserAddresses(profile.addresses || [])

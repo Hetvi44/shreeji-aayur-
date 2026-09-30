@@ -1,21 +1,32 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ComponentType } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { UserButton } from "@clerk/nextjs"
 import {
   LayoutDashboard, Package, ShoppingCart, Users,
   BarChart3, Tag, Image, Star, Settings,
-  ExternalLink, Leaf, Menu, X, Bell, LogOut,
+  ExternalLink, Leaf, Menu, Bell, Layers,
 } from "lucide-react"
 
-const navItems = [
+const navItems: {
+  section: string
+  items: {
+    label: string
+    href: string
+    icon: ComponentType<{ className?: string }>
+    badge?: string
+    badgeRed?: boolean
+  }[]
+}[] = [
   {
     section: "Main",
     items: [
       { label: "Overview",   href: "/admin",             icon: LayoutDashboard },
-      { label: "Products",   href: "/admin/products",    icon: Package,         badge: "48" },
-      { label: "Orders",     href: "/admin/orders",      icon: ShoppingCart,    badge: "12", badgeRed: true },
+      { label: "Products",   href: "/admin/products",    icon: Package },
+      { label: "Categories", href: "/admin/categories",  icon: Layers },
+      { label: "Orders",     href: "/admin/orders",      icon: ShoppingCart },
       { label: "Customers",  href: "/admin/customers",   icon: Users },
     ],
   },
@@ -44,6 +55,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pageTitle = () => {
     if (pathname === "/admin")              return "Overview"
     if (pathname.startsWith("/admin/products"))  return "Products"
+    if (pathname.startsWith("/admin/categories")) return "Categories"
     if (pathname.startsWith("/admin/orders"))    return "Orders"
     if (pathname.startsWith("/admin/customers")) return "Customers"
     if (pathname.startsWith("/admin/analytics")) return "Analytics"
@@ -115,16 +127,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* User */}
       <div className="border-t border-white/10 p-3">
         <div className="flex items-center gap-2 px-2">
-          <div className="w-7 h-7 rounded-full bg-[#81ae74] flex items-center justify-center text-white text-[11px] font-bold shrink-0">
-            A
-          </div>
+          <UserButton />
           <div className="flex-1 min-w-0">
-            <p className="text-white/70 text-[11px] font-medium truncate">Admin</p>
-            <p className="text-white/30 text-[10px] truncate">Super Admin</p>
+            <p className="text-white/70 text-[11px] font-medium truncate">Store Admin</p>
+            <p className="text-white/30 text-[10px] truncate">Manage catalog</p>
           </div>
-          <button className="text-white/30 hover:text-white/60 transition-colors" aria-label="Sign out">
-            <LogOut className="h-3.5 w-3.5" />
-          </button>
         </div>
       </div>
     </aside>
@@ -174,6 +181,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Bell className="h-4 w-4" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
             </button>
+            <Link
+              href="/admin/categories"
+              className="hidden sm:flex items-center gap-1.5 border border-[#e8e3dc] text-[#0c0f0b] text-[12px] font-medium px-3 py-1.5 rounded-full hover:bg-[#f5f0ea] transition-colors"
+            >
+              Categories
+            </Link>
             <Link
               href="/admin/products?action=add"
               className="hidden sm:flex items-center gap-1.5 bg-[#81ae74] text-white text-[12px] font-medium px-3 py-1.5 rounded-full hover:bg-[#5c8a4e] transition-colors"

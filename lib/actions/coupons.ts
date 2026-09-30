@@ -8,11 +8,11 @@ export async function validateCoupon(code: string, orderTotal: number) {
       where: { code: code.toUpperCase() },
     })
 
-    if (!coupon) return { valid: false, message: 'Coupon not found' }
-    if (!coupon.isActive) return { valid: false, message: 'Coupon is inactive' }
-    if (coupon.usedCount >= coupon.maxUses) return { valid: false, message: 'Coupon usage limit reached' }
-    if (coupon.expiresAt && coupon.expiresAt < new Date()) return { valid: false, message: 'Coupon expired' }
-    if (orderTotal < coupon.minOrderValue) return { valid: false, message: `Minimum order value ₹${coupon.minOrderValue / 100} required` }
+    if (!coupon) return { valid: false as const, message: 'Coupon not found' }
+    if (!coupon.isActive) return { valid: false as const, message: 'Coupon is inactive' }
+    if (coupon.usedCount >= coupon.maxUses) return { valid: false as const, message: 'Coupon usage limit reached' }
+    if (coupon.expiresAt && coupon.expiresAt < new Date()) return { valid: false as const, message: 'Coupon expired' }
+    if (orderTotal < coupon.minOrderValue) return { valid: false as const, message: `Minimum order value ₹${coupon.minOrderValue / 100} required` }
 
     let discount = 0
     if (coupon.type === 'PERCENTAGE') {
@@ -21,7 +21,7 @@ export async function validateCoupon(code: string, orderTotal: number) {
       discount = coupon.value
     }
 
-    return { valid: true, discount, coupon }
+    return { valid: true as const, discount, coupon }
   } catch (error) {
     console.error('[validateCoupon]', error)
     throw new Error('Failed to validate coupon')

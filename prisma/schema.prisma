@@ -9,9 +9,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -97,7 +96,7 @@ model Product {
   price         Int      // in paise (₹1 = 100 paise)
   originalPrice Int?
   stock         Int      @default(0)
-  images        String[] // array of Cloudinary URLs
+  images        Json     // array of Cloudinary URLs (stored as JSON for SQLite)
   badge         String?  // "Best Seller", "New", "Trending"
   categoryId    String
   category      Category @relation(fields: [categoryId], references: [id])

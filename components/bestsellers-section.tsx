@@ -14,6 +14,8 @@ interface BestSellersSectionProps {
 export function BestSellersSection({ products }: BestSellersSectionProps) {
   const [quickViewProduct, setQuickViewProduct] = useState<ProductWithCategory | null>(null)
 
+  if (!products.length) return null
+
   return (
     <section id="bestsellers" className="py-16 md:py-24">
       <div className="container mx-auto px-4">

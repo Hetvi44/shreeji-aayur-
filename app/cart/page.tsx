@@ -17,6 +17,18 @@ import { useCartStore } from "@/store/cart-store"
 import { formatPrice } from "@/lib/utils"
 import type { CartItemWithProduct } from "@/types"
 
+const toStoreItems = (items: CartItemWithProduct[]) =>
+  items.map((item) => ({
+    id: item.id,
+    productId: item.productId,
+    name: item.product.name,
+    price: item.product.price,
+    originalPrice: item.product.originalPrice ?? undefined,
+    image: item.product.images[0] ?? "",
+    quantity: item.quantity,
+    stock: item.product.stock,
+  }))
+
 export default function CartPage() {
   const [cartItems, setCartItems] = useState<CartItemWithProduct[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,9 +46,10 @@ export default function CartPage() {
   const loadCart = async () => {
     try {
       setLoading(true)
-      const items = await getCart()
+      const cart = await getCart()
+      const items = cart.items
       setCartItems(items)
-      setStoreItems(items)
+      setStoreItems(toStoreItems(items))
     } catch (error) {
       console.error("Failed to load cart:", error)
       toast.error("Failed to load cart")
@@ -51,12 +64,11 @@ export default function CartPage() {
       setUpdating(id)
       const result = await updateCartQuantity(id, newQuantity)
       if (result.success) {
-        setCartItems(items => items.map(item => 
+        const nextItems = cartItems.map(item =>
           item.id === id ? { ...item, quantity: newQuantity } : item
-        ))
-        setStoreItems(cartItems.map(item => 
-          item.id === id ? { ...item, quantity: newQuantity } : item
-        ))
+        )
+        setCartItems(nextItems)
+        setStoreItems(toStoreItems(nextItems))
       } else {
         toast.error(result.error)
       }
@@ -73,8 +85,9 @@ export default function CartPage() {
       setUpdating(id)
       const result = await removeFromCart(id)
       if (result.success) {
-        setCartItems(items => items.filter(item => item.id !== id))
-        setStoreItems(cartItems.filter(item => item.id !== id))
+        const nextItems = cartItems.filter(item => item.id !== id)
+        setCartItems(nextItems)
+        setStoreItems(toStoreItems(nextItems))
         toast.success("Item removed from cart")
       } else {
         toast.error(result.error)
@@ -95,11 +108,11 @@ export default function CartPage() {
       const subtotal = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
       const result = await validateCoupon(couponCode, subtotal)
       
-      if (result.success) {
-        setCouponApplied({ code: couponCode.toUpperCase(), discount: result.data!.discount })
-        toast.success(`Coupon applied! You save ${formatPrice(result.data!.discount)}`)
+      if (result.valid) {
+        setCouponApplied({ code: couponCode.toUpperCase(), discount: result.discount })
+        toast.success(`Coupon applied! You save ${formatPrice(result.discount)}`)
       } else {
-        toast.error(result.error)
+        toast.error(result.message)
       }
     } catch (error) {
       console.error("Failed to validate coupon:", error)

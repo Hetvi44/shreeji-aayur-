@@ -1,16 +1,12 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Instagram, Facebook, Twitter, Youtube, Mail, Phone, MapPin } from "lucide-react"
+import { getCategories } from "@/lib/actions/categories"
+import type { Category } from "@/types"
 
 const footerLinks = {
-  shop: [
-    { name: "All Products", href: "/products" },
-    { name: "Skin Care", href: "/category/skin-care" },
-    { name: "Hair Care", href: "/category/hair-care" },
-    { name: "Body Care", href: "/category/body-care" },
-    { name: "Face Care", href: "/category/face-care" },
-  ],
   support: [
     { name: "Contact Us", href: "/contact" },
     { name: "FAQs", href: "/#faq" },
@@ -39,6 +35,19 @@ const socialLinks = [
 ]
 
 export function Footer() {
+  const [categories, setCategories] = useState<Category[]>([])
+
+  useEffect(() => {
+    getCategories()
+      .then(setCategories)
+      .catch(() => {})
+  }, [])
+
+  const shopLinks = [
+    { name: "All Products", href: "/products" },
+    ...categories.map((c) => ({ name: c.name, href: `/category/${c.slug}` })),
+  ]
+
   return (
     <footer className="bg-foreground text-background">
       {/* Main Footer */}
@@ -71,8 +80,8 @@ export function Footer() {
           <div>
             <h4 className="font-medium mb-4 font-serif">Shop</h4>
             <ul className="space-y-3">
-              {footerLinks.shop.map((link) => (
-                <li key={link.name}>
+              {shopLinks.map((link) => (
+                <li key={link.href}>
                   <Link
                     href={link.href}
                     className="text-sm text-background/70 hover:text-background transition-colors"
@@ -81,6 +90,14 @@ export function Footer() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link
+                  href="/admin"
+                  className="text-sm text-background/70 hover:text-background transition-colors"
+                >
+                  Admin
+                </Link>
+              </li>
             </ul>
           </div>
 

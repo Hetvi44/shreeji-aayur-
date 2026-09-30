@@ -20,7 +20,7 @@ export async function getWishlist() {
       include: { product: true },
     })
 
-    return items
+    return items.map((item) => normalizeWishlistItem(item))
   } catch (error) {
     console.error('[getWishlist]', error)
     throw new Error('Failed to fetch wishlist')
@@ -29,14 +29,14 @@ export async function getWishlist() {
 
 export async function toggleWishlist(productId: string) {
   const { userId } = await auth()
-  if (!userId) throw new Error('Unauthorized')
+  if (!userId) return { success: false, error: 'Unauthorized' }
 
   try {
     const user = await db.user.findUnique({
       where: { clerkId: userId },
     })
 
-    if (!user) throw new Error('User not found')
+    if (!user) return { success: false, error: 'User not found' }
 
     const existing = await db.wishlistItem.findUnique({
       where: { userId_productId: { userId: user.id, productId } },
@@ -46,15 +46,31 @@ export async function toggleWishlist(productId: string) {
       await db.wishlistItem.delete({
         where: { id: existing.id },
       })
-      return { added: false }
+      return { success: true, data: { wishlisted: false } }
     } else {
       await db.wishlistItem.create({
         data: { userId: user.id, productId },
       })
-      return { added: true }
+      return { success: true, data: { wishlisted: true } }
     }
   } catch (error) {
     console.error('[toggleWishlist]', error)
-    throw new Error('Failed to update wishlist')
+    return { success: false, error: 'Failed to update wishlist' }
+  }
+}
+
+function normalizeProduct<T extends { images: unknown }>(product: T) {
+  return {
+    ...product,
+    images: Array.isArray(product.images)
+      ? product.images.filter((item): item is string => typeof item === 'string')
+      : [],
+  }
+}
+
+function normalizeWishlistItem<T extends { product: { images: unknown } }>(item: T) {
+  return {
+    ...item,
+    product: normalizeProduct(item.product),
   }
 }

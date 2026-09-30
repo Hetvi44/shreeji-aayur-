@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Playfair_Display, Inter } from 'next/font/google'
+import { ClerkProvider } from '@clerk/nextjs'
 import { Toaster } from 'sonner'
 import './globals.css'
 
@@ -44,13 +45,15 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="bg-background">
-      <body
-        className={`${playfair.variable} ${inter.variable} font-sans antialiased`}
-      >
-        {children}
-        <Toaster position="top-right" richColors />
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en" className="bg-background">
+        <body
+          className={`${playfair.variable} ${inter.variable} font-sans antialiased`}
+        >
+          {children}
+          <Toaster position="top-right" richColors />
+        </body>
+      </html>
+    </ClerkProvider>
   )
 }

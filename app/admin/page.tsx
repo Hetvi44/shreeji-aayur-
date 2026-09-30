@@ -11,11 +11,18 @@ export default async function AdminOverviewPage() {
     getCategories(),
   ])
 
-  const recentOrders = ordersData.orders.slice(0, 5)
+  const recentOrders = ordersData.slice(0, 5)
+
+  const overviewStats = {
+    revenue: stats.totalRevenue,
+    orders: stats.totalOrders,
+    customers: stats.totalCustomers,
+    lowStock: products.filter((product) => product.stock <= 10).length,
+  }
 
   return (
     <AdminOverviewClient 
-      stats={stats}
+      stats={overviewStats}
       recentOrders={recentOrders}
       products={products}
       categories={categories}

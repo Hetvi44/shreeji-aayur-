@@ -24,6 +24,7 @@ export function ProductCard({ product, onQuickView, isWishlisted = false, onTogg
     product.originalPrice
       ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
       : null
+  const img = product.images[0] || '/placeholder-image.jpg'
 
   return (
     <motion.div
@@ -37,11 +38,12 @@ export function ProductCard({ product, onQuickView, isWishlisted = false, onTogg
       <div className="relative aspect-square overflow-hidden bg-secondary/50">
         <Link href={`/products/${product.slug}`}>
           <Image
-            src={product.images[0] || '/placeholder-image.jpg'}
+            src={img}
             alt={product.name}
             fill
             className="object-cover transition-transform duration-500 group-hover:scale-105"
             sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+            unoptimized={img.startsWith('http')}
           />
         </Link>
 

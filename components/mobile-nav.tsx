@@ -8,8 +8,8 @@ const navItems = [
   { icon: Home, label: 'Home', href: '/' },
   { icon: Search, label: 'Search', href: '/products' },
   { icon: Heart, label: 'Wishlist', href: '/wishlist' },
-  { icon: User, label: 'Account', href: '/login' },
-  { icon: ShoppingBag, label: 'Cart', href: '/cart', badge: 2 },
+  { icon: User, label: 'Account', href: '/sign-in' },
+  { icon: ShoppingBag, label: 'Cart', href: '/cart' },
 ]
 
 export function MobileNav() {
@@ -30,11 +30,6 @@ export function MobileNav() {
             >
               <div className="relative">
                 <item.icon className="h-5 w-5" />
-                {item.badge && (
-                  <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center">
-                    {item.badge}
-                  </span>
-                )}
               </div>
               <span className="text-[10px] tracking-wide">{item.label}</span>
             </Link>

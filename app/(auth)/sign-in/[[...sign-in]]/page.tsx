@@ -13,7 +13,7 @@ export default function SignInPage() {
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-[#eef5ec] p-8">
-          <SignIn 
+          <SignIn
             appearance={{
               elements: {
                 rootBox: "mx-auto",
@@ -35,12 +35,12 @@ export default function SignInPage() {
                 modalBackdrop: "bg-[#0c0f0b]/80",
               }
             }}
-            forceRedirectUrl={typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('redirect_url') || '/' : '/'}
+            fallbackRedirectUrl="/admin"
           />
         </div>
 
         <p className="text-center mt-6 text-sm text-[#0c0f0b]/70">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/sign-up" className="text-[#81ae74] hover:underline font-medium">
             Sign up
           </Link>

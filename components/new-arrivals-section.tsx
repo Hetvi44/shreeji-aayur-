@@ -14,6 +14,8 @@ interface NewArrivalsSectionProps {
 export function NewArrivalsSection({ products }: NewArrivalsSectionProps) {
   const [quickViewProduct, setQuickViewProduct] = useState<ProductWithCategory | null>(null)
 
+  if (!products.length) return null
+
   return (
     <section className="py-16 md:py-24 bg-secondary/30">
       <div className="container mx-auto px-4">

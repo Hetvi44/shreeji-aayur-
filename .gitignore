@@ -13,3 +13,9 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+
+# Uploaded product/category images (keep folder structure)
+public/uploads/products/*
+!public/uploads/products/.gitkeep
+public/uploads/categories/*
+!public/uploads/categories/.gitkeep
